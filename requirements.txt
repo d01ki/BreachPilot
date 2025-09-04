@@ -3,4 +3,4 @@ python-nmap>=0.7.1
 requests>=2.31.0
 click>=8.1.0
 rich>=13.0.0
-anthropic>=0.20.0
+openai>=1.0.0
