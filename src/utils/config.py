@@ -19,3 +19,4 @@ def save_config(data: dict) -> None:
         CONFIG_PATH.write_text(json.dumps(data, indent=2))
     except Exception:
         pass
+

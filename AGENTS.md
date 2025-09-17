@@ -47,3 +47,4 @@ This document tracks the current scope and progress for each agent per the speci
   - Settings: Provider tokens (OpenAI/Anthropic/GitHub)
 - Next:
   - Step progress indicator, live updates, masking secrets
+

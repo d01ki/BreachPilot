@@ -17,3 +17,4 @@ def generate_report(target: str, artifacts: dict, work_dir: Path) -> tuple[Path,
     return md, pdf
 
 
+
