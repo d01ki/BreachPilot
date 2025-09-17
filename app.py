@@ -8,6 +8,7 @@ from src.agents.scan_agent import run_scan
 from src.agents.poc_agent import fetch_poc
 from src.agents.exploit_agent import run_exploit
 from src.agents.report_agent import generate_report
+from src.utils.config import load_config, save_config
 
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -38,7 +39,8 @@ def run_job(job_id: str, target: str, use_authorize: bool):
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    cfg = load_config()
+    return render_template("index.html", cfg=cfg)
 
 
 @app.post("/start")
@@ -50,6 +52,22 @@ def start():
     t = threading.Thread(target=run_job, args=(job_id, target, authorize), daemon=True)
     t.start()
     return redirect(url_for("status", job_id=job_id))
+
+
+@app.get("/settings")
+def settings():
+    cfg = load_config()
+    return render_template("settings.html", cfg=cfg)
+
+
+@app.post("/settings")
+def save_settings():
+    cfg = load_config()
+    cfg["OPENAI_API_KEY"] = request.form.get("openai_api_key", "").strip()
+    cfg["ANTHROPIC_API_KEY"] = request.form.get("anthropic_api_key", "").strip()
+    cfg["GITHUB_TOKEN"] = request.form.get("github_token", "").strip()
+    save_config(cfg)
+    return redirect(url_for("settings"))
 
 
 @app.get("/status/<job_id>")

@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
+import os
 import requests
+from src.utils.config import load_config
 
 
 def fetch_poc(scan_json_path: Path, work_dir: Path) -> dict:
@@ -9,12 +11,18 @@ def fetch_poc(scan_json_path: Path, work_dir: Path) -> dict:
     cve = "CVE-2020-1472"
     info = {"cve": cve, "sources": []}
 
-    # GitHub search API (unauthenticated limited)
+    # GitHub search API (use token if configured)
     try:
+        headers = {}
+        cfg = load_config()
+        token = cfg.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         gh = requests.get(
             "https://api.github.com/search/repositories",
             params={"q": f"{cve} in:name,description", "sort": "stars"},
             timeout=15,
+            headers=headers,
         )
         if gh.ok:
             payload = gh.json()
