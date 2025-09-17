@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Status</title>
+  </head>
+  <body class="bg-gray-50">
+    <div class="max-w-3xl mx-auto py-10">
+      <h1 class="text-xl font-bold mb-4">Job Status</h1>
+      <div class="bg-white p-6 rounded shadow">
+        <p class="mb-2"><span class="font-semibold">Job ID:</span> {{ job_id }}</p>
+        <p class="mb-4"><span class="font-semibold">Status:</span> {{ status }}</p>
+        {% if job and job.status == 'completed' %}
+        <div class="space-x-3">
+          <a href="/download/{{ job_id }}/md" class="bg-gray-700 text-white px-4 py-2 rounded">Download Markdown</a>
+          <a href="/download/{{ job_id }}/pdf" class="bg-green-600 text-white px-4 py-2 rounded">Download PDF</a>
+        </div>
+        {% elif job and job.status == 'failed' %}
+        <pre class="bg-red-50 p-3 rounded text-red-700">{{ job.error }}</pre>
+        {% else %}
+        <p>Running... refresh this page.</p>
+        {% endif %}
+      </div>
+      <div class="mt-6">
+        <a href="/" class="text-blue-600">Back</a>
+      </div>
+    </div>
+  </body>
+  </html>
+
+

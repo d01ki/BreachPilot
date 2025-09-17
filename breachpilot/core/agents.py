@@ -154,12 +154,16 @@ def execute_zerologon_attack(target: str) -> str:
     
     # Authorization check
     try:
-        auth = input("Type 'AUTHORIZE' to proceed with real attack: ")
-        if auth.strip() != "AUTHORIZE":
-            results["authorization"] = "DENIED"
-            console.print("🛡️ Attack authorization denied")
-            return json.dumps(results, indent=2)
-    except:
+        env_flag = os.getenv("BREACHPILOT_AUTHORIZE_ATTACK", "false").lower() in ("1", "true", "yes")
+        if env_flag:
+            results["authorization"] = "GRANTED"
+        else:
+            auth = input("Type 'AUTHORIZE' to proceed with real attack: ")
+            if auth.strip() != "AUTHORIZE":
+                results["authorization"] = "DENIED"
+                console.print("🛡️ Attack authorization denied")
+                return json.dumps(results, indent=2)
+    except Exception:
         results["authorization"] = "DENIED"
         console.print("🛡️ No authorization provided")
         return json.dumps(results, indent=2)
@@ -194,7 +198,9 @@ def generate_penetration_report(all_data: str) -> str:
     
     try:
         current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        output_file = f"zerologon_pentest_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        # Respect externally provided output filename if set
+        output_env = os.getenv("BREACHPILOT_OUTPUT_FILE")
+        output_file = output_env if output_env else f"zerologon_pentest_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         
         # Determine report type based on results
         if "EXPLOIT_SUCCESS" in str(all_data):

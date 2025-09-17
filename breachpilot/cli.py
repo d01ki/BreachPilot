@@ -34,7 +34,12 @@ logger = setup_logger()
     is_flag=True,
     help="Enable verbose logging"
 )
-def main(target: str, output: str, verbose: bool):
+@click.option(
+    "--authorize-attack",
+    is_flag=True,
+    help="Authorize real exploitation non-interactively (DANGEROUS)"
+)
+def main(target: str, output: str, verbose: bool, authorize_attack: bool):
     """BreachPilot - AI-powered penetration testing tool."""
     
     if verbose:
@@ -47,7 +52,7 @@ def main(target: str, output: str, verbose: bool):
     
     try:
         # Initialize the crew
-        crew = BreachPilotCrew(target=target, output_file=output, verbose=verbose)
+        crew = BreachPilotCrew(target=target, output_file=output, verbose=verbose, authorize_attack=authorize_attack)
         
         # Run the penetration testing workflow
         with Progress(

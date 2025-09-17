@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Pentest Automation (PoC)</title>
+  </head>
+  <body class="bg-gray-50">
+    <div class="max-w-3xl mx-auto py-10">
+      <h1 class="text-2xl font-bold mb-6">AI Pentest Automation (PoC)</h1>
+      <form action="/start" method="post" class="space-y-4 bg-white p-6 rounded shadow">
+        <div>
+          <label class="block text-sm font-medium">Target IP / Hostname</label>
+          <input name="target" class="mt-1 w-full border rounded p-2" placeholder="192.168.1.10" required>
+        </div>
+        <div class="flex items-center gap-6">
+          <label class="inline-flex items-center">
+            <input type="checkbox" name="authorize" class="mr-2">
+            <span>Authorize real exploitation (LAB)</span>
+          </label>
+        </div>
+        <div>
+          <button class="bg-blue-600 text-white px-4 py-2 rounded">Start</button>
+        </div>
+      </form>
+    </div>
+  </body>
+  </html>
+
+
