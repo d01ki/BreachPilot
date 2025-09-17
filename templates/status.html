@@ -4,7 +4,7 @@
 <section class="glass card rounded-xl p-6">
   <h2 class="text-lg font-semibold mb-4">Job Status</h2>
   <p class="mb-2 text-sm"><span class="font-semibold">Job ID:</span> {{ job_id }}</p>
-  <p class="mb-4 text-sm"><span class="font-semibold">Status:</span> {{ status }}</p>
+  <p class="mb-4 text-sm"><span class="font-semibold">Status:</span> {{ status }}{% if job and job.phase %} ({{ job.phase }}){% endif %}</p>
 
   {% if job and job.status == 'completed' %}
     <div class="space-x-3">
@@ -15,6 +15,38 @@
     <pre class="bg-rose-900/40 border border-rose-400/20 p-3 rounded text-rose-200 text-sm">{{ job.error }}</pre>
   {% else %}
     <p class="text-sm text-gray-300">Running... refresh this page.</p>
+  {% endif %}
+
+  {% if job and job.scan %}
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold mb-2">Scan Summary</h3>
+      <div class="grid grid-cols-2 gap-2 text-sm text-gray-300">
+        <div>
+          <div class="text-gray-400">Target</div>
+          <div>{{ job.scan.target }}</div>
+        </div>
+        <div>
+          <div class="text-gray-400">Ports (open)</div>
+          <div>
+            {% set open_ports = [] %}
+            {% for p in job.scan.ports %}
+              {% if p.state == 'open' %}{% set _ = open_ports.append(p.port) %}{% endif %}
+            {% endfor %}
+            {{ open_ports|join(', ') if open_ports else 'none' }}
+          </div>
+        </div>
+      </div>
+      {% if job.scan.inferences and job.scan.inferences.possible_domain_controller %}
+        <div class="mt-2 text-xs text-indigo-300">Inference: Possible Domain Controller</div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if job and job.exploit_log_tail %}
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold mb-2">Exploit Log (tail)</h3>
+      <pre class="bg-slate-900/60 border border-white/10 p-3 rounded text-gray-200 text-xs overflow-auto max-h-56">{{ job.exploit_log_tail }}</pre>
+    </div>
   {% endif %}
 
   <div class="mt-6">

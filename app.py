@@ -22,17 +22,40 @@ def run_job(job_id: str, target: str, use_authorize: bool):
         work_dir.mkdir(exist_ok=True)
         artifacts = {}
 
+        # Phase: Scan
+        jobs[job_id] = {"status": "running", "phase": "scan"}
         scan_json = run_scan(target, work_dir)
         artifacts["scan_json"] = str(scan_json)
+        try:
+            import json as _json
+            jobs[job_id]["scan"] = _json.loads(Path(scan_json).read_text())
+        except Exception:
+            jobs[job_id]["scan"] = {"target": target}
 
+        # Phase: PoC Retrieval
+        jobs[job_id]["phase"] = "poc"
         poc_info = fetch_poc(scan_json, work_dir)
         artifacts["poc"] = poc_info
+        jobs[job_id]["poc"] = poc_info
 
+        # Phase: Exploit
+        jobs[job_id]["phase"] = "exploit"
         exploit_log = run_exploit(target, poc_info, work_dir, authorize=use_authorize)
         artifacts["exploit_log"] = str(exploit_log)
+        try:
+            jobs[job_id]["exploit_log_tail"] = Path(exploit_log).read_text()[-800:]
+        except Exception:
+            jobs[job_id]["exploit_log_tail"] = ""
 
+        # Phase: Report
+        jobs[job_id]["phase"] = "report"
         report_md, report_pdf = generate_report(target, artifacts, work_dir)
-        jobs[job_id] = {"status": "completed", "report_md": str(report_md), "report_pdf": str(report_pdf), "artifacts": artifacts}
+        jobs[job_id].update({
+            "status": "completed",
+            "report_md": str(report_md),
+            "report_pdf": str(report_pdf),
+            "artifacts": artifacts
+        })
     except Exception as e:
         jobs[job_id] = {"status": "failed", "error": str(e)}
 
