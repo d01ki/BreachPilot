@@ -6,6 +6,18 @@
   <p class="mb-2 text-sm"><span class="font-semibold">Job ID:</span> {{ job_id }}</p>
   <p class="mb-4 text-sm"><span class="font-semibold">Status:</span> {{ status }}{% if job and job.phase %} ({{ job.phase }}){% endif %}</p>
 
+  <ol class="flex items-center text-xs text-gray-300 gap-2 mb-4">
+    {% set steps = ['scan','poc','exploit','report'] %}
+    {% for s in steps %}
+      {% set done = job and (job.status=='completed' or (job.phase and steps.index(s) <= steps.index(job.phase))) %}
+      <li class="flex items-center gap-2">
+        <span class="h-2 w-2 rounded-full {{ 'bg-indigo-400' if done else 'bg-gray-600' }}"></span>
+        <span class="uppercase tracking-wide">{{ s }}</span>
+        {% if not loop.last %}<span class="mx-2 text-gray-500">›</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+
   {% if job and job.status == 'completed' %}
     <div class="space-x-3">
       <a href="/download/{{ job_id }}/md" class="bg-slate-800 border border-white/10 hover:bg-slate-700 text-white px-4 py-2 rounded">Download Markdown</a>
@@ -20,21 +32,30 @@
   {% if job and job.scan %}
     <div class="mt-6">
       <h3 class="text-sm font-semibold mb-2">Scan Summary</h3>
-      <div class="grid grid-cols-2 gap-2 text-sm text-gray-300">
-        <div>
-          <div class="text-gray-400">Target</div>
-          <div>{{ job.scan.target }}</div>
-        </div>
-        <div>
-          <div class="text-gray-400">Ports (open)</div>
-          <div>
-            {% set open_ports = [] %}
+      <div class="text-sm text-gray-300">
+        <div class="mb-2"><span class="text-gray-400">Target:</span> {{ job.scan.target }}</div>
+        <table class="w-full text-left text-xs border border-white/10 rounded overflow-hidden">
+          <thead class="bg-slate-800/60">
+            <tr>
+              <th class="p-2">Port</th>
+              <th class="p-2">State</th>
+              <th class="p-2">Service</th>
+              <th class="p-2">Product</th>
+              <th class="p-2">Version</th>
+            </tr>
+          </thead>
+          <tbody>
             {% for p in job.scan.ports %}
-              {% if p.state == 'open' %}{% set _ = open_ports.append(p.port) %}{% endif %}
+            <tr class="border-t border-white/10">
+              <td class="p-2">{{ p.port }}</td>
+              <td class="p-2">{{ p.state }}</td>
+              <td class="p-2">{{ p.service or '' }}</td>
+              <td class="p-2">{{ p.product or '' }}</td>
+              <td class="p-2">{{ p.version or '' }}</td>
+            </tr>
             {% endfor %}
-            {{ open_ports|join(', ') if open_ports else 'none' }}
-          </div>
-        </div>
+          </tbody>
+        </table>
       </div>
       {% if job.scan.inferences and job.scan.inferences.possible_domain_controller %}
         <div class="mt-2 text-xs text-indigo-300">Inference: Possible Domain Controller</div>
