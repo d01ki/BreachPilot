@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+{% block title %}AI Agents in Action - BreachPilot Demo{% endblock %}
+{% block content %}
+
+<section class="glass card rounded-xl p-6">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 class="text-xl font-semibold mb-1">🤖 AI-Assisted Penetration Test</h2>
+      <p class="text-sm text-gray-400">Job ID: {{ job_id }} | Demo Mode</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <div id="status-indicator" class="h-3 w-3 rounded-full bg-yellow-400 animate-pulse"></div>
+      <span id="status-text" class="text-sm font-medium">{{ job.status|title }}</span>
+    </div>
+  </div>
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-slate-800/30 rounded-lg p-4">
+      <p class="text-sm text-gray-400 mb-1">Target System</p>
+      <p class="font-mono text-sm">{{ job.target if job else 'Unknown' }}</p>
+    </div>
+    <div class="bg-slate-800/30 rounded-lg p-4">
+      <p class="text-sm text-gray-400 mb-1">AI Features</p>
+      <p class="text-sm text-green-300">✅ Full CrewAI + Claude Pipeline</p>
+    </div>
+  </div>
+
+  <!-- Enhanced Progress Bar with Animation -->
+  <div class="mb-8">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="text-sm font-semibold">Overall Progress</h3>
+      <span id="progress-percent" class="text-sm text-gray-400">{{ job.progress if job.progress else 0 }}%</span>
+    </div>
+    <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+      <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-3 rounded-full transition-all duration-1000 relative overflow-hidden" 
+           style="width: {{ job.progress if job.progress else 0 }}%">
+        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+      </div>
+    </div>
+    <div id="phase-description" class="text-xs text-gray-400 mt-2">
+      {{ job.phase_description if job.phase_description else 'Initializing...' }}
+    </div>
+  </div>
+
+  <!-- Live AI Agent Activity Timeline -->
+  <div class="mb-8">
+    <h3 class="text-sm font-semibold mb-4">🎭 AI Agent Activity Pipeline</h3>
+    <div class="space-y-4">
+      {% set phases = [
+        ('scan', '🔍 Network Scan Agent', 'Nmap + service enumeration with vulnerability detection', 'indigo'),
+        ('ai_scan_analysis', '🤖 CrewAI Vulnerability Analyst', 'AI-powered threat assessment and risk analysis', 'purple'),
+        ('poc', '🔎 PoC Discovery Agent', 'GitHub/ExploitDB research with intelligent ranking', 'blue'),
+        ('ai_poc_research', '🧠 CrewAI Research Specialist', 'Advanced exploit evaluation and selection', 'cyan'),
+        ('exploit', '⚡ Exploit Execution Engine', 'Controlled PoC testing in sandbox environment', 'yellow'),
+        ('ai_exploit_analysis', '📊 CrewAI Impact Analyst', 'Result analysis and impact assessment', 'orange'),
+        ('report', '📝 Claude Report Generator', 'Professional documentation with executive summary', 'green')
+      ] %}
+      
+      {% for phase_id, phase_name, phase_desc, color in phases %}
+        {% set is_current = job and job.phase == phase_id %}
+        {% set is_completed = job and (job.status == 'completed' or (phases|map('first')|list).index(phase_id) < (phases|map('first')|list).index(job.phase|default('scan'))) %}
+        {% set is_upcoming = not is_current and not is_completed %}
+        
+        <div id="phase-{{ phase_id }}" class="phase-item flex items-start gap-4 p-4 rounded-xl transition-all duration-500 
+             {{ 'bg-gradient-to-r from-' + color + '-900/40 to-' + color + '-800/20 border border-' + color + '-400/30 shadow-lg shadow-' + color + '-500/10' if is_current 
+             else 'bg-green-900/20 border border-green-400/20' if is_completed 
+             else 'bg-slate-800/20 border border-slate-600/30' }}">
+          
+          <div class="flex-shrink-0">
+            <!-- Status Icon -->
+            <div class="flex items-center justify-center h-10 w-10 rounded-full transition-all duration-300
+                 {{ 'bg-' + color + '-500 text-white animate-pulse' if is_current 
+                 else 'bg-green-500 text-white' if is_completed 
+                 else 'bg-slate-600 text-gray-300' }}">
+              {% if is_completed %}
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                </svg>
+              {% elif is_current %}
+                <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+              {% else %}
+                <span class="text-sm">{{ loop.index }}</span>
+              {% endif %}
+            </div>
+          </div>
+          
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-medium {{ 'text-white' if is_current else 'text-green-300' if is_completed else 'text-gray-300' }}">
+                {{ phase_name }}
+              </h4>
+              <span class="text-xs px-2 py-1 rounded-full {{ 'bg-' + color + '-500/20 text-' + color + '-300' if is_current 
+                     else 'bg-green-500/20 text-green-300' if is_completed 
+                     else 'bg-gray-600/20 text-gray-400' }}">
+                {{ 'Active' if is_current else 'Complete' if is_completed else 'Pending' }}
+              </span>
+            </div>
+            <p class="text-xs {{ 'text-' + color + '-200' if is_current else 'text-green-200' if is_completed else 'text-gray-400' }}">
+              {{ phase_desc }}
+            </p>
+            
+            <!-- Live Status Messages -->
+            {% if is_current %}
+              <div id="live-status-{{ phase_id }}" class="mt-2 p-2 bg-black/20 rounded border-l-2 border-{{ color }}-400">
+                <p class="text-xs text-{{ color }}-200 font-mono" id="status-message-{{ phase_id }}">
+                  {{ job.phase_description if job.phase_description else 'Processing...' }}
+                </p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Real-time Metrics Dashboard -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-slate-800/30 rounded-lg p-4 text-center">
+      <div id="vulnerabilities-found" class="text-2xl font-bold text-red-400 mb-1">
+        {{ job.total_vulnerabilities if job.total_vulnerabilities is defined else '-' }}
+      </div>
+      <div class="text-xs text-gray-400">Vulnerabilities</div>
+    </div>
+    <div class="bg-slate-800/30 rounded-lg p-4 text-center">
+      <div id="critical-findings" class="text-2xl font-bold text-orange-400 mb-1">
+        {{ job.critical_findings if job.critical_findings is defined else '-' }}
+      </div>
+      <div class="text-xs text-gray-400">Critical Issues</div>
+    </div>
+    <div class="bg-slate-800/30 rounded-lg p-4 text-center">
+      <div id="elapsed-time" class="text-2xl font-bold text-blue-400 mb-1">--</div>
+      <div class="text-xs text-gray-400">Elapsed Time</div>
+    </div>
+    <div class="bg-slate-800/30 rounded-lg p-4 text-center">
+      <div id="ai-confidence" class="text-2xl font-bold text-green-400 mb-1">95%</div>
+      <div class="text-xs text-gray-400">AI Confidence</div>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  {% if job and job.status == 'completed' %}
+    <div class="bg-gradient-to-r from-green-900/40 to-emerald-800/20 border border-green-400/30 rounded-xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="h-12 w-12 bg-green-500 rounded-xl flex items-center justify-center">
+          <svg class="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-lg font-semibold text-green-300">✅ AI Assessment Complete!</h3>
+          <p class="text-sm text-green-200">Comprehensive vulnerability analysis finished</p>
+        </div>
+      </div>
+      
+      <!-- Key Results Summary -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div class="bg-black/20 rounded-lg p-3">
+          <div class="text-sm text-gray-300 mb-1">Risk Level</div>
+          <div class="text-lg font-bold {{ 'text-red-400' if job.exploit_success else 'text-yellow-400' }}">
+            {{ 'CRITICAL' if job.exploit_success else 'HIGH' }}
+          </div>
+        </div>
+        <div class="bg-black/20 rounded-lg p-3">
+          <div class="text-sm text-gray-300 mb-1">CVE Detected</div>
+          <div class="text-lg font-bold text-orange-400">CVE-2020-1472</div>
+        </div>
+        <div class="bg-black/20 rounded-lg p-3">
+          <div class="text-sm text-gray-300 mb-1">Exploit Status</div>
+          <div class="text-lg font-bold {{ 'text-red-400' if job.exploit_success else 'text-yellow-400' }}">
+            {{ 'CONFIRMED' if job.exploit_success else 'LIKELY' }}
+          </div>
+        </div>
+      </div>
+      
+      <div class="flex flex-wrap gap-3">
+        <a href="/results/{{ job_id }}" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+          <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          View Detailed Results
+        </a>
+        <a href="/download/{{ job_id }}/md" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition">
+          📄 Download Report
+        </a>
+        <a href="/download/{{ job_id }}/pdf" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition">
+          📋 Download PDF
+        </a>
+      </div>
+    </div>
+  {% elif job and job.status == 'failed' %}
+    <div class="bg-red-900/30 border border-red-400/20 rounded-lg p-4 mb-6">
+      <div class="flex items-center gap-2 mb-3">
+        <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+        </svg>
+        <h3 class="text-sm font-semibold text-red-300">Assessment Failed</h3>
+      </div>
+      <pre class="bg-red-900/40 border border-red-400/20 p-3 rounded text-red-200 text-xs overflow-auto">{{ job.error }}</pre>
+    </div>
+  {% endif %}
+
+  <!-- Demo Information -->
+  <div class="bg-blue-900/20 border border-blue-400/20 rounded-lg p-4 mb-6">
+    <div class="flex items-start gap-3">
+      <div class="h-8 w-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
+        <span class="text-blue-300 text-sm">🎭</span>
+      </div>
+      <div>
+        <h4 class="text-sm font-medium text-blue-300 mb-1">Demo Mode Active</h4>
+        <p class="text-xs text-blue-200 leading-relaxed">
+          This demonstration showcases the complete AI agent workflow using realistic mock data. 
+          All AI interactions, vulnerability assessments, and exploit analysis are simulated to provide 
+          an accurate representation of the production system capabilities.
+        </p>
+        <div class="mt-2 text-xs text-blue-300">
+          ✨ Features demonstrated: CrewAI multi-agent system, Claude report generation, real-time progress tracking
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <a href="/" class="text-indigo-400 hover:text-indigo-300 text-sm">← Back to Home</a>
+    <button onclick="location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition">
+      🔄 Refresh Status
+    </button>
+  </div>
+</section>
+
+<script>
+let startTime = {{ job.started_at * 1000 if job.started_at else 'Date.now()' }};
+let updateInterval;
+
+// Enhanced real-time updates with visual effects
+function updateJobStatus() {
+    fetch(`/api/job/{{ job_id }}`)
+        .then(response => response.json())
+        .then(data => {
+            // Update progress bar with animation
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercent = document.getElementById('progress-percent');
+            if (progressBar && data.progress !== undefined) {
+                progressBar.style.width = data.progress + '%';
+                progressPercent.textContent = data.progress + '%';
+            }
+            
+            // Update phase description with typewriter effect
+            const phaseDesc = document.getElementById('phase-description');
+            if (phaseDesc && data.phase_description) {
+                phaseDesc.textContent = data.phase_description;
+            }
+            
+            // Update status indicator
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+            
+            if (data.status === 'completed') {
+                statusIndicator.className = 'h-3 w-3 rounded-full bg-green-400';
+                statusText.textContent = 'Completed';
+                clearInterval(updateInterval);
+                
+                // Trigger completion celebration
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+                
+            } else if (data.status === 'failed') {
+                statusIndicator.className = 'h-3 w-3 rounded-full bg-red-400';
+                statusText.textContent = 'Failed';
+                clearInterval(updateInterval);
+                setTimeout(() => location.reload(), 1500);
+                
+            } else {
+                // Update current phase styling
+                updatePhaseVisuals(data.phase);
+                
+                // Update live status message for current phase
+                if (data.phase && data.phase_description) {
+                    const liveStatus = document.getElementById(`live-status-${data.phase}`);
+                    const statusMessage = document.getElementById(`status-message-${data.phase}`);
+                    if (statusMessage) {
+                        statusMessage.textContent = data.phase_description;
+                    }
+                }
+                
+                statusText.textContent = data.phase ? 
+                    formatPhase(data.phase) : 'Processing';
+            }
+            
+            // Update metrics
+            updateMetrics(data);
+            
+            // Update elapsed time
+            updateElapsedTime();
+            
+        })
+        .catch(error => {
+            console.error('Error fetching job status:', error);
+        });
+}
+
+function updatePhaseVisuals(currentPhase) {
+    const phases = ['scan', 'ai_scan_analysis', 'poc', 'ai_poc_research', 'exploit', 'ai_exploit_analysis', 'report'];
+    const colors = ['indigo', 'purple', 'blue', 'cyan', 'yellow', 'orange', 'green'];
+    
+    phases.forEach((phase, index) => {
+        const phaseElement = document.getElementById(`phase-${phase}`);
+        if (!phaseElement) return;
+        
+        const isActive = phase === currentPhase;
+        const isCompleted = phases.indexOf(phase) < phases.indexOf(currentPhase);
+        
+        // Remove old classes
+        phaseElement.className = phaseElement.className.replace(/bg-\w+-\d+\/\d+|border-\w+-\d+\/\d+|shadow-\w+-\d+\/\d+/g, '');
+        
+        if (isActive) {
+            phaseElement.className += ` bg-gradient-to-r from-${colors[index]}-900/40 to-${colors[index]}-800/20 border border-${colors[index]}-400/30 shadow-lg shadow-${colors[index]}-500/10`;
+        } else if (isCompleted) {
+            phaseElement.className += ' bg-green-900/20 border border-green-400/20';
+        } else {
+            phaseElement.className += ' bg-slate-800/20 border border-slate-600/30';
+        }
+    });
+}
+
+function updateMetrics(data) {
+    // Update vulnerabilities count with animation
+    const vulnElement = document.getElementById('vulnerabilities-found');
+    if (vulnElement && data.total_vulnerabilities !== undefined) {
+        animateValue(vulnElement, parseInt(vulnElement.textContent) || 0, data.total_vulnerabilities);
+    }
+    
+    // Update critical findings
+    const criticalElement = document.getElementById('critical-findings');
+    if (criticalElement && data.critical_findings !== undefined) {
+        animateValue(criticalElement, parseInt(criticalElement.textContent) || 0, data.critical_findings);
+    }
+}
+
+function animateValue(element, start, end) {
+    if (start === end) return;
+    
+    const duration = 1000;
+    const startTime = Date.now();
+    
+    function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        const current = Math.round(start + (end - start) * progress);
+        element.textContent = current;
+        
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    }
+    
+    animate();
+}
+
+function updateElapsedTime() {
+    const elapsedElement = document.getElementById('elapsed-time');
+    if (elapsedElement) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        elapsedElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+}
+
+function formatPhase(phase) {
+    const phaseNames = {
+        'scan': 'Scanning',
+        'ai_scan_analysis': 'AI Analysis', 
+        'poc': 'PoC Research',
+        'ai_poc_research': 'AI Research',
+        'exploit': 'Exploitation',
+        'ai_exploit_analysis': 'AI Assessment',
+        'report': 'Generating Report'
+    };
+    return phaseNames[phase] || 'Processing';
+}
+
+// Start real-time updates
+{% if job and job.status == 'running' %}
+  updateInterval = setInterval(updateJobStatus, 2000); // Update every 2 seconds
+  
+  // Initial update
+  setTimeout(updateJobStatus, 500);
+{% endif %}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (updateInterval) {
+        clearInterval(updateInterval);
+    }
+});
+</script>
+
+{% endblock %}
