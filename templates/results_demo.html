@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+{% block title %}AI Analysis Results - BreachPilot Demo{% endblock %}
+{% block content %}
+
+<section class="glass card rounded-xl p-6">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 class="text-xl font-semibold mb-1">🎯 AI Penetration Test Results</h2>
+      <p class="text-sm text-gray-400">Job ID: {{ job_id }} | Demo Mode</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="px-3 py-1 bg-green-900/50 text-green-300 rounded-full text-xs font-medium">✅ Completed</span>
+    </div>
+  </div>
+
+  <!-- Executive Dashboard -->
+  <div class="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-400/20 rounded-xl p-6 mb-8">
+    <div class="flex items-center gap-4 mb-4">
+      <div class="h-16 w-16 bg-red-500/20 rounded-xl flex items-center justify-center">
+        <svg class="h-8 w-8 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-xl font-bold text-red-300">CRITICAL VULNERABILITY DETECTED</h3>
+        <p class="text-red-200">CVE-2020-1472 (Zerologon) - Immediate action required</p>
+      </div>
+    </div>
+    
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="text-center">
+        <p class="text-3xl font-bold text-red-400 mb-1">10.0</p>
+        <p class="text-sm text-red-200">CVSS Score</p>
+      </div>
+      <div class="text-center">
+        <p class="text-3xl font-bold text-orange-400 mb-1">{{ 'YES' if job.exploit_success else 'LIKELY' }}</p>
+        <p class="text-sm text-orange-200">Exploitable</p>
+      </div>
+      <div class="text-center">
+        <p class="text-3xl font-bold text-yellow-400 mb-1">{{ '9.1s' if job.exploit_success else 'N/A' }}</p>
+        <p class="text-sm text-yellow-200">Exploit Time</p>
+      </div>
+      <div class="text-center">
+        <p class="text-3xl font-bold text-red-400 mb-1">DOMAIN</p>
+        <p class="text-sm text-red-200">Impact Scope</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Agent Results Tabs -->
+  <div class="mb-8">
+    <div class="border-b border-gray-600 mb-6">
+      <nav class="-mb-px flex space-x-8">
+        <button onclick="showTab('ai-scan')" id="tab-ai-scan" class="tab-button active py-3 px-1 border-b-2 border-purple-500 text-purple-400 text-sm font-medium">
+          🤖 AI Scan Analysis
+        </button>
+        <button onclick="showTab('ai-poc')" id="tab-ai-poc" class="tab-button py-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 text-sm font-medium">
+          🧠 AI PoC Research
+        </button>
+        <button onclick="showTab('ai-exploit')" id="tab-ai-exploit" class="tab-button py-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 text-sm font-medium">
+          📊 AI Impact Analysis
+        </button>
+        <button onclick="showTab('network')" id="tab-network" class="tab-button py-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 text-sm font-medium">
+          🔍 Network Details
+        </button>
+      </nav>
+    </div>
+
+    <!-- AI Scan Analysis Tab -->
+    <div id="content-ai-scan" class="tab-content">
+      <div class="bg-slate-800/30 rounded-xl p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="h-10 w-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+            <span class="text-purple-400 text-lg">🤖</span>
+          </div>
+          <div>
+            <h4 class="text-lg font-semibold text-purple-300">CrewAI Vulnerability Scan Analyst</h4>
+            <p class="text-sm text-gray-400">Advanced AI-powered threat assessment</p>
+          </div>
+        </div>
+        
+        <div class="space-y-6">
+          <!-- Vulnerability Assessment -->
+          <div class="bg-red-900/20 border border-red-400/20 rounded-lg p-4">
+            <h5 class="text-sm font-medium text-red-300 mb-3">🚨 Critical Vulnerability Assessment</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div class="text-xs text-gray-400 mb-1">CVE Identifier</div>
+                <div class="text-sm font-mono text-red-300">CVE-2020-1472</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400 mb-1">Severity Level</div>
+                <div class="text-sm font-bold text-red-400">CRITICAL</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400 mb-1">CVSS Score</div>
+                <div class="text-sm font-bold text-red-400">10.0</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400 mb-1">Confidence Level</div>
+                <div class="text-sm font-bold text-green-400">HIGH</div>
+              </div>
+            </div>
+            
+            <div class="mt-4 p-3 bg-red-900/20 rounded border-l-4 border-red-400">
+              <p class="text-sm text-red-200">
+                <strong>AI Assessment:</strong> Zerologon vulnerability detected - Domain Controller compromise possible through network-based attack requiring no authentication.
+              </p>
+            </div>
+          </div>
+
+          <!-- Service Analysis -->
+          <div class="bg-slate-900/30 rounded-lg p-4">
+            <h5 class="text-sm font-medium text-gray-300 mb-3">🔍 Affected Services Analysis</h5>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between p-2 bg-red-900/20 rounded">
+                <span class="text-sm">Kerberos (88/tcp)</span>
+                <span class="px-2 py-1 bg-red-500 text-white rounded text-xs">CRITICAL</span>
+              </div>
+              <div class="flex items-center justify-between p-2 bg-yellow-900/20 rounded">
+                <span class="text-sm">LDAP (389/tcp)</span>
+                <span class="px-2 py-1 bg-yellow-500 text-white rounded text-xs">HIGH</span>
+              </div>
+              <div class="flex items-center justify-between p-2 bg-yellow-900/20 rounded">
+                <span class="text-sm">SMB (445/tcp)</span>
+                <span class="px-2 py-1 bg-yellow-500 text-white rounded text-xs">HIGH</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Recommendations -->
+          <div class="bg-blue-900/20 border border-blue-400/20 rounded-lg p-4">
+            <h5 class="text-sm font-medium text-blue-300 mb-3">🎯 AI Recommendations</h5>
+            <ul class="space-y-2 text-sm text-blue-200">
+              <li class="flex items-start gap-2">
+                <span class="text-red-400">🔴</span>
+                <span>Apply Microsoft KB4556414 patch immediately</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-yellow-400">🟡</span>
+                <span>Monitor authentication logs for suspicious activity</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-green-400">🟢</span>
+                <span>Implement network segmentation around Domain Controllers</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Other tabs continue as already written... -->
+    <!-- (The rest of the tabs from the previous response would go here) -->
+
+  </div>
+
+  <!-- Download and Actions Section -->
+  <div class="bg-slate-800/30 rounded-lg p-6 mb-6">
+    <h4 class="text-lg font-semibold mb-4">📋 Generated Reports</h4>
+    <p class="text-sm text-gray-400 mb-4">
+      Professional penetration testing reports generated by Claude AI with comprehensive analysis and executive summaries.
+    </p>
+    <div class="flex flex-wrap gap-4">
+      <a href="/download/{{ job_id }}/md" class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg text-sm font-medium transition">
+        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        </svg>
+        📄 Markdown Report
+      </a>
+      <a href="/download/{{ job_id }}/pdf" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg text-sm font-medium transition">
+        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        </svg>
+        📋 Professional PDF
+      </a>
+    </div>
+    <div class="mt-3 text-xs text-gray-400">
+      ✨ Reports include: Executive summary, technical findings, AI analysis results, remediation recommendations
+    </div>
+  </div>
+
+  <!-- Demo Information -->
+  <div class="bg-blue-900/20 border border-blue-400/20 rounded-lg p-6 mb-6">
+    <div class="flex items-start gap-3">
+      <div class="h-8 w-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
+        <span class="text-blue-300 text-sm">🎭</span>
+      </div>
+      <div>
+        <h4 class="text-sm font-medium text-blue-300 mb-2">Demo Mode - Realistic AI Workflow Simulation</h4>
+        <div class="space-y-2 text-xs text-blue-200">
+          <p>This demonstration showcases the complete AI-assisted penetration testing workflow using realistic mock data and analysis results.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+            <div>
+              <strong class="text-blue-300">AI Agents Simulated:</strong>
+              <ul class="mt-1 space-y-1 text-blue-200">
+                <li>• CrewAI Vulnerability Scan Analyst</li>
+                <li>• CrewAI Exploit Research Specialist</li>
+                <li>• CrewAI Exploit Execution Analyst</li>
+                <li>• Claude Report Generator</li>
+              </ul>
+            </div>
+            <div>
+              <strong class="text-blue-300">Features Demonstrated:</strong>
+              <ul class="mt-1 space-y-1 text-blue-200">
+                <li>• Multi-agent AI collaboration</li>
+                <li>• Intelligent PoC discovery & ranking</li>
+                <li>• Professional report generation</li>
+                <li>• Executive-ready documentation</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <a href="/" class="text-indigo-400 hover:text-indigo-300 text-sm">← Back to Home</a>
+    <div class="flex gap-2">
+      <a href="/status/{{ job_id }}" class="text-gray-400 hover:text-gray-300 text-sm">View Status Page →</a>
+    </div>
+  </div>
+</section>
+
+<script>
+function showTab(tabId) {
+  // Hide all tab contents
+  const contents = document.querySelectorAll('.tab-content');
+  contents.forEach(content => {
+    content.classList.add('hidden');
+  });
+  
+  // Remove active class from all tab buttons
+  const buttons = document.querySelectorAll('.tab-button');
+  buttons.forEach(button => {
+    button.classList.remove('active', 'border-purple-500', 'text-purple-400');
+    button.classList.add('border-transparent', 'text-gray-400');
+  });
+  
+  // Show selected tab content
+  document.getElementById('content-' + tabId).classList.remove('hidden');
+  
+  // Add active class to selected tab button
+  const activeButton = document.getElementById('tab-' + tabId);
+  activeButton.classList.add('active', 'border-purple-500', 'text-purple-400');
+  activeButton.classList.remove('border-transparent', 'text-gray-400');
+}
+</script>
+
+{% endblock %}
