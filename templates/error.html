@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}{{ error }} - BreachPilot{% endblock %}
+{% block content %}
+
+<section class="glass card rounded-xl p-8 text-center">
+  <div class="mb-6">
+    <div class="h-16 w-16 bg-red-600/20 rounded-xl mx-auto mb-4 flex items-center justify-center">
+      <svg class="h-8 w-8 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+      </svg>
+    </div>
+    <h1 class="text-2xl font-bold text-red-400 mb-2">{{ code }}</h1>
+    <h2 class="text-lg text-gray-300">{{ error }}</h2>
+  </div>
+  
+  <p class="text-gray-400 mb-8">
+    {% if code == 404 %}
+      The page you're looking for doesn't exist or has been moved.
+    {% elif code == 500 %}
+      An internal server error occurred. Please try again later.
+    {% else %}
+      An unexpected error occurred while processing your request.
+    {% endif %}
+  </p>
+  
+  <div class="flex flex-col sm:flex-row gap-4 justify-center">
+    <a href="/" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-medium transition">
+      Go Home
+    </a>
+    <button onclick="history.back()" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium transition">
+      Go Back
+    </button>
+  </div>
+</section>
+
+{% endblock %}
