@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>{% block title %}BreachPilot{% endblock %}</title>
+    <style>
+      .glass { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(10px); }
+      .glass-light { background: rgba(31, 41, 55, 0.6); backdrop-filter: blur(10px); }
+      .card { border: 1px solid rgba(255,255,255,0.06); }
+    </style>
+  </head>
+  <body class="min-h-screen text-gray-100 bg-gradient-to-br from-slate-900 via-indigo-950 to-black">
+    <div class="max-w-5xl mx-auto px-4 py-8">
+      <header class="mb-8 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded bg-indigo-500/20 border border-indigo-400/20 grid place-items-center">
+            <span class="text-indigo-300 font-semibold">BP</span>
+          </div>
+          <div>
+            <h1 class="text-lg font-semibold tracking-wide">BreachPilot</h1>
+            <p class="text-xs text-gray-400">AI Pentest Automation (PoC)</p>
+          </div>
+        </a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a href="/" class="hover:text-indigo-300 transition">Home</a>
+          <a href="/settings" class="hover:text-indigo-300 transition">Settings</a>
+          <a href="https://github.com/d01ki/PentestAgents" class="text-gray-400 hover:text-indigo-300 transition" target="_blank" rel="noopener">GitHub Ref</a>
+        </nav>
+      </header>
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="mt-10 text-xs text-gray-500">
+        <p>For authorized LAB use only. Do not test without permission.</p>
+      </footer>
+    </div>
+  </body>
+  </html>
+
+

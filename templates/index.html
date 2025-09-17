@@ -1,43 +1,41 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>Pentest Automation (PoC)</title>
-  </head>
-  <body class="bg-gray-50">
-    <div class="max-w-3xl mx-auto py-10">
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold">AI Pentest Automation (PoC)</h1>
-        <a href="/settings" class="text-blue-600">Settings</a>
+{% extends 'base.html' %}
+{% block title %}Home - BreachPilot{% endblock %}
+{% block content %}
+<section class="grid md:grid-cols-2 gap-6">
+  <div class="glass card rounded-xl p-6">
+    <h2 class="text-lg font-semibold mb-4">Start Assessment</h2>
+    <form action="/start" method="post" class="space-y-4">
+      <div>
+        <label class="block text-sm text-gray-300">Target IP / Hostname</label>
+        <input name="target" class="mt-1 w-full bg-slate-800/60 border border-white/10 rounded p-2 text-gray-100 placeholder-gray-400" placeholder="192.168.1.10" required>
       </div>
-      <form action="/start" method="post" class="space-y-4 bg-white p-6 rounded shadow">
-        <div>
-          <label class="block text-sm font-medium">Target IP / Hostname</label>
-          <input name="target" class="mt-1 w-full border rounded p-2" placeholder="192.168.1.10" required>
-        </div>
-        <div class="flex items-center gap-6">
-          <label class="inline-flex items-center">
-            <input type="checkbox" name="authorize" class="mr-2">
-            <span>Authorize real exploitation (LAB)</span>
-          </label>
-        </div>
-        <div>
-          <button class="bg-blue-600 text-white px-4 py-2 rounded">Start</button>
-        </div>
-      </form>
-      <div class="mt-6 text-sm text-gray-600">
-        <p>Configured providers: 
-          {% set providers = [] %}
-          {% if cfg and cfg.OPENAI_API_KEY %}{% set _ = providers.append('OpenAI') %}{% endif %}
-          {% if cfg and cfg.ANTHROPIC_API_KEY %}{% set _ = providers.append('Claude') %}{% endif %}
-          {% if cfg and cfg.GITHUB_TOKEN %}{% set _ = providers.append('GitHub') %}{% endif %}
-          {{ providers|join(', ') if providers else 'none' }}
-        </p>
+      <div class="flex items-center gap-6 text-sm">
+        <label class="inline-flex items-center">
+          <input type="checkbox" name="authorize" class="mr-2">
+          <span class="text-gray-300">Authorize real exploitation (LAB)</span>
+        </label>
       </div>
-    </div>
-  </body>
-  </html>
+      <div>
+        <button class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded transition">Start</button>
+      </div>
+    </form>
+  </div>
+  <div class="glass card rounded-xl p-6">
+    <h2 class="text-lg font-semibold mb-2">Configured Providers</h2>
+    <ul class="text-sm text-gray-300 list-disc ml-5 space-y-1">
+      {% set providers = [] %}
+      {% if cfg and cfg.OPENAI_API_KEY %}{% set _ = providers.append('OpenAI') %}{% endif %}
+      {% if cfg and cfg.ANTHROPIC_API_KEY %}{% set _ = providers.append('Claude') %}{% endif %}
+      {% if cfg and cfg.GITHUB_TOKEN %}{% set _ = providers.append('GitHub') %}{% endif %}
+      {% if providers %}
+        {% for p in providers %}<li>{{ p }}</li>{% endfor %}
+      {% else %}
+        <li>None</li>
+      {% endif %}
+    </ul>
+    <p class="text-xs text-gray-500 mt-3">Configure tokens in Settings.</p>
+  </div>
+</section>
+{% endblock %}
 
 
