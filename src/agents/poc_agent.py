@@ -39,7 +39,10 @@ def fetch_poc(scan_json_path: Path, work_dir: Path) -> dict:
 
     # GitHub search API (use token if configured)
     try:
-        headers = {}
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "BreachPilot-PoC-Retrieval"
+        }
         cfg = load_config()
         token = cfg.get("GITHUB_TOKEN")
         if token:
@@ -69,6 +72,13 @@ def fetch_poc(scan_json_path: Path, work_dir: Path) -> dict:
             info["sources"] = sorted(items, key=lambda x: x.get("score",0), reverse=True)
             if info["sources"]:
                 info["selected"] = info["sources"][0]
+            # rate limit meta if available
+            rl = {
+                "remaining": gh.headers.get("X-RateLimit-Remaining"),
+                "limit": gh.headers.get("X-RateLimit-Limit"),
+                "reset": gh.headers.get("X-RateLimit-Reset"),
+            }
+            info["github_rate_limit"] = rl
     except Exception:
         pass
 
