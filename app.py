@@ -6,12 +6,14 @@ import os
 import re
 import json as _json
 import time
+import asyncio
 
 from src.agents.scan_agent import run_scan
 from src.agents.poc_agent import fetch_poc
 from src.agents.exploit_agent import run_exploit
 from src.agents.report_agent import generate_report
 from src.agents.ai_orchestrator import get_orchestrator
+from src.agents.multi_agent_orchestrator import get_multi_agent_orchestrator
 from src.utils.config import load_config, save_config
 
 
@@ -158,6 +160,93 @@ def index():
     }
     
     return render_template("index.html", cfg=cfg, api_status=api_status)
+
+
+@app.get("/attack-chain")
+def attack_chain():
+    """Attack Chain Orchestrator page"""
+    return render_template("attack_chain.html")
+
+
+# Attack Chain API Endpoints
+@app.post("/api/attack-chain/create")
+def create_attack_chain():
+    """Create new attack chain"""
+    try:
+        data = request.get_json()
+        target = data.get("target")
+        objective = data.get("objective", "domain_compromise")
+        
+        if not target:
+            return jsonify({"success": False, "error": "Target is required"})
+        
+        orchestrator = get_multi_agent_orchestrator()
+        chain = orchestrator.create_attack_chain(target, objective)
+        
+        return jsonify({
+            "success": True,
+            "chain_id": chain.id,
+            "message": "Attack chain created successfully"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.post("/api/attack-chain/<chain_id>/execute")
+def execute_attack_chain(chain_id: str):
+    """Execute attack chain"""
+    try:
+        orchestrator = get_multi_agent_orchestrator()
+        
+        # Run execution in background thread since it's async
+        def run_async_execution():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(orchestrator.execute_attack_chain(chain_id))
+                print(f"Attack chain {chain_id} execution result: {result}")
+            except Exception as e:
+                print(f"Attack chain {chain_id} execution error: {e}")
+            finally:
+                loop.close()
+        
+        thread = threading.Thread(target=run_async_execution, daemon=True)
+        thread.start()
+        
+        return jsonify({
+            "success": True,
+            "message": "Attack chain execution started"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.get("/api/attack-chain/<chain_id>/status")
+def get_attack_chain_status(chain_id: str):
+    """Get attack chain status"""
+    try:
+        orchestrator = get_multi_agent_orchestrator()
+        status = orchestrator.get_chain_status(chain_id)
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.post("/api/attack-chain/<chain_id>/stop")
+def stop_attack_chain(chain_id: str):
+    """Stop attack chain execution"""
+    try:
+        orchestrator = get_multi_agent_orchestrator()
+        result = orchestrator.stop_attack_chain(chain_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.post("/api/attack-chain/<chain_id>/pause")
+def pause_attack_chain(chain_id: str):
+    """Pause attack chain execution (same as stop for now)"""
+    return stop_attack_chain(chain_id)
 
 
 @app.post("/start")
@@ -422,6 +511,8 @@ if __name__ == "__main__":
     print("  - CrewAI Integration: ✅")
     print("  - Claude Analysis: ✅") 
     print("  - OpenAI Support: ✅")
+    print("  - Multi-Agent Orchestrator: ✅")
+    print("  - Attack Chain Visualization: ✅")
     print("  - Enhanced Reporting: ✅")
     
     app.run(host="0.0.0.0", port=port, debug=debug)
