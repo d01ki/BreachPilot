@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attack Chain Orchestrator - BreachPilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .attack-chain-network {
+            height: 500px;
+            border: 1px solid #374151;
+            border-radius: 8px;
+        }
+        
+        .timeline-item {
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 0.5rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3b82f6;
+        }
+        
+        .agent-card {
+            transition: all 0.3s ease;
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .status-idle { border-left: 4px solid #10b981; }
+        .status-busy { border-left: 4px solid #f59e0b; }
+        .status-error { border-left: 4px solid #ef4444; }
+        
+        .task-pending { background: rgba(156, 163, 175, 0.2); }
+        .task-running { background: rgba(59, 130, 246, 0.2); }
+        .task-completed { background: rgba(16, 185, 129, 0.2); }
+        .task-failed { background: rgba(239, 68, 68, 0.2); }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="glass border-b border-gray-700 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                BreachPilot - Attack Chain Orchestrator
+            </h1>
+            <div class="flex space-x-4">
+                <a href="/" class="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">Home</a>
+                <a href="/settings" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700 transition">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        <!-- Attack Chain Creation -->
+        <div class="glass rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Create Attack Chain</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Target</label>
+                    <input type="text" id="target" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg" 
+                           placeholder="192.168.1.10">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Objective</label>
+                    <select id="objective" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg">
+                        <option value="domain_compromise">Domain Compromise</option>
+                        <option value="privilege_escalation">Privilege Escalation</option>
+                        <option value="data_exfiltration">Data Exfiltration</option>
+                        <option value="persistence">Persistence</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="createAttackChain()" 
+                            class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:from-purple-700 hover:to-blue-700 transition">
+                        Create & Execute Chain
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Attack Chains -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Attack Chain Status -->
+            <div class="glass rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Active Attack Chains</h3>
+                <div id="active-chains" class="space-y-4">
+                    <div class="text-gray-400 text-center py-8">No active attack chains</div>
+                </div>
+            </div>
+
+            <!-- Agent Status -->
+            <div class="glass rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Agent Status</h3>
+                <div id="agent-status" class="space-y-3">
+                    <div class="text-gray-400 text-center py-8">No agents active</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Chain Visualization -->
+        <div class="glass rounded-lg p-6 mb-6" id="visualization-container" style="display: none;">
+            <h3 class="text-lg font-semibold mb-4">Attack Chain Visualization</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Network Graph -->
+                <div class="lg:col-span-2">
+                    <h4 class="text-md font-medium mb-2">Attack Flow</h4>
+                    <div id="attack-chain-network" class="attack-chain-network bg-gray-800 rounded-lg"></div>
+                </div>
+                
+                <!-- Progress & Controls -->
+                <div class="space-y-4">
+                    <div class="bg-gray-800 rounded-lg p-4">
+                        <h4 class="text-md font-medium mb-2">Progress</h4>
+                        <div class="w-full bg-gray-700 rounded-full h-3 mb-2">
+                            <div id="progress-bar" class="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div id="progress-text" class="text-sm text-gray-400">0% Complete</div>
+                    </div>
+                    
+                    <div class="bg-gray-800 rounded-lg p-4">
+                        <h4 class="text-md font-medium mb-2">Controls</h4>
+                        <div class="space-y-2">
+                            <button id="pause-btn" onclick="pauseAttackChain()" class="w-full px-4 py-2 bg-yellow-600 rounded-lg hover:bg-yellow-700 transition">
+                                Pause Chain
+                            </button>
+                            <button id="stop-btn" onclick="stopAttackChain()" class="w-full px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition">
+                                Stop Chain
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline -->
+        <div class="glass rounded-lg p-6" id="timeline-container" style="display: none;">
+            <h3 class="text-lg font-semibold mb-4">Attack Timeline</h3>
+            <div id="attack-timeline" class="max-h-96 overflow-y-auto">
+                <div class="text-gray-400 text-center py-8">No timeline events</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChainId = null;
+        let network = null;
+        let updateInterval = null;
+
+        async function createAttackChain() {
+            const target = document.getElementById('target').value;
+            const objective = document.getElementById('objective').value;
+
+            if (!target) {
+                alert('Please enter a target');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/attack-chain/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target, objective })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    currentChainId = result.chain_id;
+                    document.getElementById('visualization-container').style.display = 'block';
+                    document.getElementById('timeline-container').style.display = 'block';
+                    
+                    // Execute the chain
+                    executeAttackChain(currentChainId);
+                    
+                    // Start monitoring
+                    startMonitoring();
+                } else {
+                    alert('Failed to create attack chain: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error creating attack chain:', error);
+                alert('Failed to create attack chain');
+            }
+        }
+
+        async function executeAttackChain(chainId) {
+            try {
+                const response = await fetch(`/api/attack-chain/${chainId}/execute`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                console.log('Chain execution started:', result);
+            } catch (error) {
+                console.error('Error executing attack chain:', error);
+            }
+        }
+
+        function startMonitoring() {
+            if (updateInterval) clearInterval(updateInterval);
+            
+            updateInterval = setInterval(async () => {
+                if (currentChainId) {
+                    await updateChainStatus();
+                }
+            }, 2000); // Update every 2 seconds
+        }
+
+        async function updateChainStatus() {
+            try {
+                const response = await fetch(`/api/attack-chain/${currentChainId}/status`);
+                const status = await response.json();
+                
+                if (status.error) {
+                    console.error('Error getting chain status:', status.error);
+                    return;
+                }
+
+                updateVisualization(status);
+                updateAgentStatus(status.agent_states);
+                updateTimeline(status.recent_timeline);
+                updateProgress(status.progress);
+                updateActiveChains([status]);
+
+                // Stop monitoring if chain is completed or failed
+                if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped') {
+                    clearInterval(updateInterval);
+                }
+            } catch (error) {
+                console.error('Error updating chain status:', error);
+            }
+        }
+
+        function updateVisualization(status) {
+            const visualization = status.visualization;
+            
+            if (!network && visualization) {
+                const container = document.getElementById('attack-chain-network');
+                const data = {
+                    nodes: visualization.nodes.map(node => ({
+                        id: node.id,
+                        label: node.name,
+                        color: getNodeColor(node.status),
+                        x: node.position.x,
+                        y: node.position.y,
+                        title: `${node.name}\nStage: ${node.stage}\nAgent: ${node.agent}\nStatus: ${node.status}`
+                    })),
+                    edges: visualization.edges.map(edge => ({
+                        from: edge.from,
+                        to: edge.to,
+                        arrows: 'to',
+                        color: '#64748b'
+                    }))
+                };
+
+                const options = {
+                    physics: { enabled: false },
+                    layout: { hierarchical: false },
+                    nodes: {
+                        shape: 'box',
+                        margin: 10,
+                        font: { color: '#ffffff', size: 12 }
+                    },
+                    edges: {
+                        smooth: { type: 'cubicBezier' }
+                    }
+                };
+
+                network = new vis.Network(container, data, options);
+            } else if (network && visualization) {
+                // Update existing network
+                const updatedNodes = visualization.nodes.map(node => ({
+                    id: node.id,
+                    color: getNodeColor(node.status)
+                }));
+                network.setData({
+                    nodes: network.body.data.nodes.update(updatedNodes),
+                    edges: network.body.data.edges
+                });
+            }
+        }
+
+        function getNodeColor(status) {
+            const colors = {
+                'pending': '#6b7280',
+                'running': '#3b82f6',
+                'completed': '#10b981',
+                'failed': '#ef4444'
+            };
+            return colors[status] || '#6b7280';
+        }
+
+        function updateAgentStatus(agents) {
+            const container = document.getElementById('agent-status');
+            
+            if (!agents || agents.length === 0) {
+                container.innerHTML = '<div class="text-gray-400 text-center py-8">No agents active</div>';
+                return;
+            }
+
+            container.innerHTML = agents.map(agent => `
+                <div class="agent-card bg-gray-800 rounded-lg p-3 status-${agent.status}">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="font-medium">${agent.role.replace('_', ' ').toUpperCase()}</div>
+                            <div class="text-sm text-gray-400">Tasks: ${agent.completed_tasks_count}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-medium ${agent.status === 'busy' ? 'text-yellow-400' : agent.status === 'idle' ? 'text-green-400' : 'text-red-400'}">
+                                ${agent.status.toUpperCase()}
+                            </div>
+                            ${agent.current_task ? `<div class="text-xs text-gray-500">Active Task</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateTimeline(timeline) {
+            const container = document.getElementById('attack-timeline');
+            
+            if (!timeline || timeline.length === 0) {
+                container.innerHTML = '<div class="text-gray-400 text-center py-8">No timeline events</div>';
+                return;
+            }
+
+            container.innerHTML = timeline.map(event => `
+                <div class="timeline-item">
+                    <div class="text-sm text-gray-400">${new Date(event.timestamp).toLocaleTimeString()}</div>
+                    <div class="text-white">${event.message}</div>
+                </div>
+            `).join('');
+        }
+
+        function updateProgress(progress) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${Math.round(progress)}% Complete`;
+        }
+
+        function updateActiveChains(chains) {
+            const container = document.getElementById('active-chains');
+            
+            if (!chains || chains.length === 0) {
+                container.innerHTML = '<div class="text-gray-400 text-center py-8">No active attack chains</div>';
+                return;
+            }
+
+            container.innerHTML = chains.map(chain => `
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="font-medium">${chain.name}</div>
+                            <div class="text-sm text-gray-400">Target: ${chain.target}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-medium ${getStatusColor(chain.status)}">${chain.status.toUpperCase()}</div>
+                            <div class="text-xs text-gray-500">${Math.round(chain.progress)}% complete</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'running': 'text-blue-400',
+                'completed': 'text-green-400',
+                'failed': 'text-red-400',
+                'stopped': 'text-yellow-400'
+            };
+            return colors[status] || 'text-gray-400';
+        }
+
+        async function pauseAttackChain() {
+            if (!currentChainId) return;
+            
+            try {
+                const response = await fetch(`/api/attack-chain/${currentChainId}/pause`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                console.log('Chain paused:', result);
+            } catch (error) {
+                console.error('Error pausing attack chain:', error);
+            }
+        }
+
+        async function stopAttackChain() {
+            if (!currentChainId) return;
+            
+            try {
+                const response = await fetch(`/api/attack-chain/${currentChainId}/stop`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                console.log('Chain stopped:', result);
+                
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                }
+            } catch (error) {
+                console.error('Error stopping attack chain:', error);
+            }
+        }
+    </script>
+</body>
+</html>
