@@ -1,6 +1,6 @@
 """
 BreachPilot Multi-Agent Attack Chain Orchestrator
-攻撃チェーンの自動オーケストレーションと可視化
+攻撃チェーンの自動オーケストレーションと可視化 (Enhanced)
 """
 import asyncio
 import json
@@ -14,14 +14,19 @@ from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import queue
+import logging
 
 from .attack_chain_models import AttackChain, AttackTask, AgentState, TaskStatus, AttackStage, AgentRole
 from .shared_knowledge import SharedKnowledgeBase
 from .attack_chain_visualizer import AttackChainVisualizer
 
+# Setup enhanced logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
+
 
 class MultiAgentOrchestrator:
-    """マルチエージェント攻撃チェーンオーケストレーター"""
+    """マルチエージェント攻撃チェーンオーケストレーター (Enhanced)"""
     
     def __init__(self, max_workers: int = 4):
         self.max_workers = max_workers
@@ -31,6 +36,9 @@ class MultiAgentOrchestrator:
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.running = False
         self._lock = threading.Lock()
+        self.execution_logs: Dict[str, List[Dict[str, Any]]] = {}
+        
+        logger.info(f"MultiAgentOrchestrator initialized with {max_workers} workers")
     
     def create_attack_chain(self, target: str, objective: str) -> AttackChain:
         """攻撃チェーンを作成"""
@@ -40,11 +48,38 @@ class MultiAgentOrchestrator:
             objective=objective
         )
         
+        logger.info(f"Creating attack chain for target: {target}, objective: {objective}")
+        
         chain.tasks = self._generate_default_attack_tasks(target, objective)
         chain.agent_states = self._initialize_agents()
         
+        # Initialize execution logs for this chain
+        self.execution_logs[chain.id] = []
+        self._log_to_chain(chain.id, "info", f"Attack chain created with {len(chain.tasks)} tasks")
+        
         self.active_chains[chain.id] = chain
+        logger.info(f"Attack chain {chain.id} created successfully")
         return chain
+    
+    def _log_to_chain(self, chain_id: str, level: str, message: str):
+        """チェーン固有のログを追加"""
+        if chain_id not in self.execution_logs:
+            self.execution_logs[chain_id] = []
+        
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "level": level,
+            "message": message
+        }
+        
+        self.execution_logs[chain_id].append(log_entry)
+        
+        # Keep only last 200 log entries per chain
+        if len(self.execution_logs[chain_id]) > 200:
+            self.execution_logs[chain_id] = self.execution_logs[chain_id][-200:]
+        
+        # Also log to console
+        getattr(logger, level, logger.info)(f"[{chain_id[:8]}] {message}")
     
     def _generate_default_attack_tasks(self, target: str, objective: str) -> List[AttackTask]:
         """デフォルトの攻撃タスクを生成"""
@@ -56,7 +91,7 @@ class MultiAgentOrchestrator:
             stage=AttackStage.RECONNAISSANCE,
             agent_role=AgentRole.RECON_SPECIALIST,
             priority=10,
-            estimated_duration=120,
+            estimated_duration=15,  # Shorter durations for demo
             metadata={"target": target}
         )
         tasks.append(recon_task)
@@ -68,7 +103,7 @@ class MultiAgentOrchestrator:
             agent_role=AgentRole.RECON_SPECIALIST,
             dependencies=[recon_task.id],
             priority=9,
-            estimated_duration=180,
+            estimated_duration=20,
             metadata={"target": target}
         )
         tasks.append(scan_task)
@@ -80,7 +115,7 @@ class MultiAgentOrchestrator:
             agent_role=AgentRole.VULNERABILITY_ANALYST,
             dependencies=[scan_task.id],
             priority=8,
-            estimated_duration=300,
+            estimated_duration=25,
             metadata={"focus": "CVE-2020-1472, SMB, Kerberos"}
         )
         tasks.append(vuln_task)
@@ -92,7 +127,7 @@ class MultiAgentOrchestrator:
             agent_role=AgentRole.EXPLOIT_ENGINEER,
             dependencies=[vuln_task.id],
             priority=7,
-            estimated_duration=240,
+            estimated_duration=30,
             metadata={"target": target}
         )
         tasks.append(exploit_task)
@@ -104,11 +139,12 @@ class MultiAgentOrchestrator:
             agent_role=AgentRole.POST_EXPLOIT_SPECIALIST,
             dependencies=[exploit_task.id],
             priority=6,
-            estimated_duration=180,
+            estimated_duration=20,
             metadata={"focus": "privilege, persistence, lateral movement"}
         )
         tasks.append(post_exploit_task)
         
+        logger.info(f"Generated {len(tasks)} default attack tasks")
         return tasks
     
     def _initialize_agents(self) -> Dict[str, AgentState]:
@@ -132,6 +168,7 @@ class MultiAgentOrchestrator:
             )
             agents[agent_id] = agent
         
+        logger.info(f"Initialized {len(agents)} agents")
         return agents
     
     async def execute_attack_chain(self, chain_id: str) -> Dict[str, Any]:
@@ -144,6 +181,8 @@ class MultiAgentOrchestrator:
         chain.started_at = datetime.now()
         self.running = True
         
+        self._log_to_chain(chain_id, "info", "Starting attack chain execution")
+        
         try:
             self._enqueue_ready_tasks(chain)
             
@@ -152,9 +191,13 @@ class MultiAgentOrchestrator:
                 # 新しいタスクを開始
                 while len(futures) < self.max_workers and not self.task_queue.empty():
                     try:
-                        priority, task_id, chain_id = self.task_queue.get_nowait()
+                        priority, task_id, current_chain_id = self.task_queue.get_nowait()
+                        if current_chain_id != chain_id:
+                            continue
+                            
                         task = self._find_task_by_id(chain, task_id)
                         if task and task.status == TaskStatus.PENDING:
+                            self._log_to_chain(chain_id, "debug", f"Starting task: {task.name}")
                             future = self.executor.submit(self._execute_task, task, chain)
                             futures.append((future, task))
                     except queue.Empty:
@@ -176,16 +219,18 @@ class MultiAgentOrchestrator:
                     futures.remove(completed)
                 
                 self._enqueue_ready_tasks(chain)
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)  # Check more frequently
             
             if all(task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED] for task in chain.tasks):
                 chain.status = "completed"
                 chain.completed_at = datetime.now()
+                self._log_to_chain(chain_id, "success", "Attack chain completed successfully")
             
             return self._generate_execution_summary(chain)
             
         except Exception as e:
             chain.status = "failed"
+            self._log_to_chain(chain_id, "error", f"Attack chain execution failed: {str(e)}")
             return {"error": str(e)}
         finally:
             self.running = False
@@ -225,6 +270,7 @@ class MultiAgentOrchestrator:
             agent.last_activity = datetime.now()
         
         self._add_timeline_event(chain, f"Task started: {task.name}", task.id)
+        self._log_to_chain(chain.id, "info", f"Executing task: {task.name} (Agent: {agent.role.value if agent else 'None'})")
         
         try:
             result = self._run_task_logic(task, chain)
@@ -235,6 +281,7 @@ class MultiAgentOrchestrator:
             task.actual_duration = int((task.end_time - task.start_time).total_seconds())
             
             self.knowledge_base.store(f"task_result_{task.stage.value}", result, agent.id if agent else "system")
+            self._log_to_chain(chain.id, "success", f"Task completed: {task.name} (Duration: {task.actual_duration}s)")
             
             return result
             
@@ -242,6 +289,7 @@ class MultiAgentOrchestrator:
             task.status = TaskStatus.FAILED
             task.error = str(e)
             task.end_time = datetime.now()
+            self._log_to_chain(chain.id, "error", f"Task failed: {task.name} - {str(e)}")
             raise e
         finally:
             if agent:
@@ -260,29 +308,49 @@ class MultiAgentOrchestrator:
         """実際のタスク実行ロジック"""
         target = task.metadata.get("target")
         
+        # Simulate realistic task execution with logs
         if task.stage == AttackStage.RECONNAISSANCE:
+            self._log_to_chain(chain.id, "debug", f"Gathering OSINT data for {target}")
+            time.sleep(3)
+            self._log_to_chain(chain.id, "info", f"DNS enumeration completed for {target}")
+            time.sleep(2)
             return {
                 "status": "success", 
                 "data": {
                     "target": target,
                     "domain_info": f"Analysis of {target}",
-                    "records": ["DNS", "WHOIS"]
+                    "records": ["DNS", "WHOIS", "Certificate transparency"],
+                    "subdomains": ["mail", "www", "ftp"]
                 }
             }
         elif task.stage == AttackStage.SCANNING:
+            self._log_to_chain(chain.id, "debug", f"Starting Nmap scan of {target}")
+            time.sleep(4)
+            self._log_to_chain(chain.id, "info", "Port 88/tcp open - Kerberos detected")
+            time.sleep(2)
+            self._log_to_chain(chain.id, "info", "Port 389/tcp open - LDAP detected")
+            time.sleep(1)
+            self._log_to_chain(chain.id, "warning", "Target appears to be a Domain Controller")
             return {
                 "status": "success", 
                 "data": {
                     "target": target,
                     "ports": [
-                        {"port": 88, "service": "kerberos"},
-                        {"port": 389, "service": "ldap"},
-                        {"port": 445, "service": "microsoft-ds"}
+                        {"port": 88, "service": "kerberos", "state": "open"},
+                        {"port": 389, "service": "ldap", "state": "open"},
+                        {"port": 445, "service": "microsoft-ds", "state": "open"},
+                        {"port": 53, "service": "domain", "state": "open"}
                     ],
-                    "domain_controller": True
+                    "domain_controller": True,
+                    "os_detection": "Windows Server 2016-2019"
                 }
             }
         elif task.stage == AttackStage.VULNERABILITY_ANALYSIS:
+            self._log_to_chain(chain.id, "debug", "Analyzing detected services for vulnerabilities")
+            time.sleep(3)
+            self._log_to_chain(chain.id, "warning", "Netlogon service detected - checking for CVE-2020-1472")
+            time.sleep(2)
+            self._log_to_chain(chain.id, "error", "CRITICAL: Target vulnerable to Zerologon attack!")
             return {
                 "status": "success", 
                 "data": {
@@ -290,17 +358,48 @@ class MultiAgentOrchestrator:
                         "cve": "CVE-2020-1472",
                         "name": "Zerologon",
                         "severity": "critical",
-                        "cvss": 10.0
-                    }]
+                        "cvss": 10.0,
+                        "description": "Netlogon elevation of privilege vulnerability",
+                        "exploitable": True
+                    }],
+                    "risk_level": "critical",
+                    "recommendation": "Immediate patching required"
                 }
             }
         elif task.stage == AttackStage.EXPLOITATION:
+            self._log_to_chain(chain.id, "debug", "Preparing Zerologon exploit")
+            time.sleep(2)
+            self._log_to_chain(chain.id, "info", "Establishing secure channel to target DC")
+            time.sleep(3)
+            self._log_to_chain(chain.id, "warning", "Attempting authentication bypass...")
+            time.sleep(4)
+            self._log_to_chain(chain.id, "success", "Zerologon exploit successful! Domain Admin privileges obtained")
             return {
                 "status": "success", 
                 "data": {
-                    "exploit_attempt": "CVE-2020-1472 Zerologon",
+                    "exploit_name": "CVE-2020-1472 Zerologon",
                     "success": True,
-                    "impact": "Domain Administrator privileges"
+                    "privileges_gained": "Domain Administrator",
+                    "access_level": "SYSTEM",
+                    "next_steps": ["Persistence", "Lateral movement", "Data collection"]
+                }
+            }
+        elif task.stage == AttackStage.POST_EXPLOITATION:
+            self._log_to_chain(chain.id, "debug", "Analyzing post-exploitation opportunities")
+            time.sleep(2)
+            self._log_to_chain(chain.id, "info", "Enumerating domain users and computers")
+            time.sleep(3)
+            self._log_to_chain(chain.id, "info", "Identifying high-value targets for lateral movement")
+            time.sleep(2)
+            self._log_to_chain(chain.id, "warning", "Sensitive data repositories discovered")
+            return {
+                "status": "success", 
+                "data": {
+                    "domain_users": 150,
+                    "domain_computers": 75,
+                    "admin_accounts": 8,
+                    "sensitive_shares": ["\\\\DC\\SYSVOL", "\\\\FileServer\\Finance"],
+                    "persistence_methods": ["Golden ticket", "Silver ticket", "Scheduled tasks"]
                 }
             }
         else:
@@ -369,12 +468,17 @@ class MultiAgentOrchestrator:
         chain = self.active_chains[chain_id]
         visualization_data = AttackChainVisualizer.generate_chain_graph(chain)
         
+        # Calculate progress based on completed tasks
+        total_tasks = len(chain.tasks)
+        completed_tasks = len([t for t in chain.tasks if t.status == TaskStatus.COMPLETED])
+        progress = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+        
         return {
             "chain_id": chain.id,
             "name": chain.name,
             "target": chain.target,
             "status": chain.status,
-            "progress": visualization_data["metadata"]["progress"],
+            "progress": progress,
             "agent_states": [
                 {
                     "id": agent.id,
@@ -386,7 +490,8 @@ class MultiAgentOrchestrator:
                 for agent in chain.agent_states.values()
             ],
             "visualization": visualization_data,
-            "recent_timeline": chain.timeline[-10:] if chain.timeline else []
+            "recent_timeline": chain.timeline[-20:] if chain.timeline else [],
+            "logs": self.execution_logs.get(chain_id, [])[-50:]  # Return last 50 logs
         }
     
     def stop_attack_chain(self, chain_id: str) -> Dict[str, Any]:
@@ -405,6 +510,7 @@ class MultiAgentOrchestrator:
                 task.end_time = datetime.now()
         
         self._add_timeline_event(chain, "Attack chain manually stopped")
+        self._log_to_chain(chain_id, "warning", "Attack chain stopped by user")
         return {"status": "stopped", "chain_id": chain_id}
 
 
