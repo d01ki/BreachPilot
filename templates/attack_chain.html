@@ -1,12 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attack Chain Orchestrator - BreachPilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .attack-chain-network {
+            height: 400px;
+            border: 1px solid #374151;
+            border-radius: 8px;
+        }
+        
+        .timeline-item {
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 0.5rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3b82f6;
+        }
+        
+        .agent-card {
+            transition: all 0.3s ease;
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .status-idle { border-left: 4px solid #10b981; }
+        .status-busy { border-left: 4px solid #f59e0b; }
+        .status-error { border-left: 4px solid #ef4444; }
+        
+        .log-container {
+            height: 300px;
+            overflow-y: auto;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .log-timestamp {
+            color: #64748b;
+            min-width: 60px;
+            font-size: 10px;
+        }
+
+        .log-level-info { color: #3b82f6; }
+        .log-level-success { color: #10b981; }
+        .log-level-warning { color: #f59e0b; }
+        .log-level-error { color: #ef4444; }
+        .log-level-debug { color: #8b5cf6; }
+
+        .progress-ring {
+            width: 120px;
+            height: 120px;
+        }
+
+        .progress-ring-circle {
+            stroke: #374151;
+            stroke-width: 8;
+            fill: transparent;
+            r: 52;
+            cx: 60;
+            cy: 60;
+        }
+
+        .progress-ring-progress {
+            stroke: #3b82f6;
+            stroke-width: 8;
+            fill: transparent;
+            r: 52;
+            cx: 60;
+            cy: 60;
+            stroke-dasharray: 326.73;
+            stroke-dashoffset: 326.73;
+            transition: stroke-dashoffset 0.5s ease;
+            transform: rotate(-90deg);
+            transform-origin: center;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="glass border-b border-gray-700 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                BreachPilot - Multi-Agent Attack Chain Orchestrator
+            </h1>
+            <div class="flex space-x-4">
+                <a href="/" class="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">Home</a>
+                <a href="/settings" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700 transition">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        <!-- Feature Comparison Info -->
+        <div class="glass rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">🚀 Advanced Multi-Agent Attack Chain</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-lg p-4">
+                    <h3 class="text-lg font-medium text-purple-300 mb-3">🔗 Attack Chain Orchestrator (This Page)</h3>
+                    <ul class="text-sm text-gray-300 space-y-1">
+                        <li>• <strong>Multi-Agent Coordination</strong> - Specialized AI agents work in parallel</li>
+                        <li>• <strong>Real-time Visualization</strong> - Live attack flow and progress tracking</li>
+                        <li>• <strong>Fast Simulation</strong> - Quick demonstration of attack scenarios</li>
+                        <li>• <strong>Dynamic Task Management</strong> - Intelligent dependency handling</li>
+                        <li>• <strong>Live Logging</strong> - Real-time execution feedback</li>
+                    </ul>
+                </div>
+                <div class="bg-gradient-to-r from-green-900/30 to-indigo-900/30 rounded-lg p-4">
+                    <h3 class="text-lg font-medium text-green-300 mb-3">⚙️ Traditional Penetration Test</h3>
+                    <ul class="text-sm text-gray-300 space-y-1">
+                        <li>• <strong>Sequential Execution</strong> - Step-by-step traditional workflow</li>
+                        <li>• <strong>Real Scanning</strong> - Actual Nmap scans and tool execution</li>
+                        <li>• <strong>Comprehensive Reports</strong> - Full PDF/Markdown documentation</li>
+                        <li>• <strong>Single AI Agent</strong> - One agent handles all phases</li>
+                        <li>• <strong>Production Ready</strong> - Suitable for actual penetration testing</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-4 text-center">
+                <a href="/" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                    Try Traditional Penetration Test
+                </a>
+            </div>
+        </div>
+
+        <!-- Attack Chain Creation -->
+        <div class="glass rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Create Multi-Agent Attack Chain</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Target</label>
+                    <input type="text" id="target" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg" 
+                           placeholder="192.168.1.10 or dc.example.com">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Objective</label>
+                    <select id="objective" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg">
+                        <option value="domain_compromise">Domain Compromise</option>
+                        <option value="privilege_escalation">Privilege Escalation</option>
+                        <option value="data_exfiltration">Data Exfiltration</option>
+                        <option value="persistence">Persistence</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="createAttackChain()" 
+                            class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:from-purple-700 hover:to-blue-700 transition"
+                            id="create-btn">
+                        🚀 Create & Execute Chain
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="main-dashboard" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" style="display: none;">
+            <!-- Progress Circle -->
+            <div class="glass rounded-lg p-6 text-center">
+                <h3 class="text-lg font-semibold mb-4">Chain Progress</h3>
+                <div class="flex justify-center mb-4">
+                    <svg class="progress-ring">
+                        <circle class="progress-ring-circle"></circle>
+                        <circle class="progress-ring-progress" id="progress-circle"></circle>
+                    </svg>
+                </div>
+                <div id="progress-text" class="text-2xl font-bold mb-2">0%</div>
+                <div id="progress-status" class="text-sm text-gray-400">Initializing...</div>
+                
+                <div class="mt-6 space-y-2">
+                    <button id="pause-btn" onclick="pauseAttackChain()" 
+                            class="w-full px-4 py-2 bg-yellow-600 rounded-lg hover:bg-yellow-700 transition">
+                        ⏸️ Pause Chain
+                    </button>
+                    <button id="stop-btn" onclick="stopAttackChain()" 
+                            class="w-full px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition">
+                        ⏹️ Stop Chain
+                    </button>
+                </div>
+            </div>
+
+            <!-- Agent Status -->
+            <div class="glass rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">🤖 Agent Status</h3>
+                <div id="agent-status" class="space-y-3">
+                    <div class="text-gray-400 text-center py-8">No agents active</div>
+                </div>
+            </div>
+
+            <!-- Current Task -->
+            <div class="glass rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">⚡ Current Task</h3>
+                <div id="current-task" class="text-center py-8 text-gray-400">
+                    <div class="animate-pulse">
+                        <div class="h-4 bg-gray-700 rounded mb-2"></div>
+                        <div class="h-3 bg-gray-700 rounded w-2/3 mx-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Chain Visualization -->
+        <div class="glass rounded-lg p-6 mb-6" id="visualization-container" style="display: none;">
+            <h3 class="text-lg font-semibold mb-4">🔗 Attack Flow Visualization</h3>
+            <div id="attack-chain-network" class="attack-chain-network bg-gray-800 rounded-lg"></div>
+        </div>
+
+        <!-- Real-time Logs -->
+        <div class="glass rounded-lg p-6 mb-6" id="logs-container" style="display: none;">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">📋 Real-time Execution Logs</h3>
+                <div class="flex space-x-2">
+                    <button onclick="clearLogs()" class="px-3 py-1 bg-gray-600 rounded text-sm hover:bg-gray-700 transition">
+                        🗑️ Clear
+                    </button>
+                    <button onclick="toggleAutoScroll()" id="autoscroll-btn" class="px-3 py-1 bg-blue-600 rounded text-sm hover:bg-blue-700 transition">
+                        Auto-scroll: ON
+                    </button>
+                </div>
+            </div>
+            <div id="logs" class="log-container"></div>
+        </div>
+
+        <!-- Timeline -->
+        <div class="glass rounded-lg p-6" id="timeline-container" style="display: none;">
+            <h3 class="text-lg font-semibold mb-4">⏰ Attack Timeline</h3>
+            <div id="attack-timeline" class="max-h-64 overflow-y-auto">
+                <div class="text-gray-400 text-center py-8">No timeline events</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChainId = null;
+        let network = null;
+        let updateInterval = null;
+        let autoScroll = true;
+        let logCounter = 0;
+        let processedLogs = new Set();
+
+        function addLog(level, message, timestamp = null) {
+            const logsContainer = document.getElementById('logs');
+            const time = timestamp || new Date().toLocaleTimeString();
+            logCounter++;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">${time}</span>
+                <span class="log-level-${level}">[${level.toUpperCase()}]</span>
+                <span class="text-gray-300">${message}</span>
+            `;
+            
+            logsContainer.appendChild(logEntry);
+            
+            if (autoScroll) {
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+            
+            if (logCounter > 500) {
+                logsContainer.removeChild(logsContainer.firstChild);
+                logCounter--;
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+            logCounter = 0;
+            processedLogs.clear();
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('autoscroll-btn');
+            btn.textContent = `Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+            btn.className = autoScroll ? 
+                'px-3 py-1 bg-blue-600 rounded text-sm hover:bg-blue-700 transition' :
+                'px-3 py-1 bg-gray-600 rounded text-sm hover:bg-gray-700 transition';
+        }
+
+        function updateProgress(progress) {
+            const circle = document.getElementById('progress-circle');
+            const text = document.getElementById('progress-text');
+            const status = document.getElementById('progress-status');
+            
+            const circumference = 2 * Math.PI * 52;
+            const offset = circumference - (progress / 100) * circumference;
+            
+            circle.style.strokeDashoffset = offset;
+            text.textContent = `${Math.round(progress)}%`;
+            
+            if (progress === 0) {
+                status.textContent = 'Initializing...';
+            } else if (progress < 20) {
+                status.textContent = 'Reconnaissance';
+            } else if (progress < 40) {
+                status.textContent = 'Scanning';
+            } else if (progress < 60) {
+                status.textContent = 'Vulnerability Analysis';
+            } else if (progress < 80) {
+                status.textContent = 'Exploitation';
+            } else if (progress < 100) {
+                status.textContent = 'Post-Exploitation';
+            } else {
+                status.textContent = 'Completed';
+            }
+        }
+
+        function updateCurrentTask(taskName, agent) {
+            const container = document.getElementById('current-task');
+            if (taskName) {
+                container.innerHTML = `
+                    <div class="text-left">
+                        <div class="text-lg font-medium text-blue-400 mb-2">${taskName}</div>
+                        <div class="text-sm text-gray-400">Assigned to: ${agent || 'AI Agent'}</div>
+                        <div class="flex items-center mt-3">
+                            <div class="pulse w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                            <span class="text-xs text-blue-300">Executing...</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<div class="text-gray-400">No active tasks</div>';
+            }
+        }
+
+        async function createAttackChain() {
+            const target = document.getElementById('target').value;
+            const objective = document.getElementById('objective').value;
+            const createBtn = document.getElementById('create-btn');
+
+            if (!target) {
+                alert('Please enter a target');
+                return;
+            }
+
+            createBtn.disabled = true;
+            createBtn.innerHTML = '⏳ Creating...';
+            
+            addLog('info', `Creating attack chain for target: ${target}`);
+
+            try {
+                const response = await fetch('/api/attack-chain/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target, objective })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    currentChainId = result.chain_id;
+                    addLog('success', `Attack chain created successfully (ID: ${currentChainId.substring(0, 8)}...)`);
+                    
+                    document.getElementById('main-dashboard').style.display = 'grid';
                     document.getElementById('visualization-container').style.display = 'block';
                     document.getElementById('logs-container').style.display = 'block';
                     document.getElementById('timeline-container').style.display = 'block';
                     
-                    // Execute the chain
                     addLog('info', 'Starting attack chain execution...');
                     executeAttackChain(currentChainId);
-                    
-                    // Start monitoring
                     startMonitoring();
                 } else {
                     addLog('error', `Failed to create attack chain: ${result.error}`);
@@ -18,7 +418,7 @@
                 alert('Failed to create attack chain');
             } finally {
                 createBtn.disabled = false;
-                createBtn.innerHTML = 'Create & Execute Chain';
+                createBtn.innerHTML = '🚀 Create & Execute Chain';
             }
         }
 
@@ -50,7 +450,7 @@
                 if (currentChainId) {
                     await updateChainStatus();
                 }
-            }, 1000); // Update every second for real-time feel
+            }, 1000);
         }
 
         async function updateChainStatus() {
@@ -63,25 +463,14 @@
                     return;
                 }
 
-                // Update progress
                 updateProgress(status.progress || 0);
-                
-                // Update visualization
                 updateVisualization(status);
-                
-                // Update agent status
                 updateAgentStatus(status.agent_states);
-                
-                // Update timeline
                 updateTimeline(status.recent_timeline);
-                
-                // Update current task
                 updateCurrentTaskDisplay(status);
 
-                // Process server logs if available
                 if (status.logs && status.logs.length > 0) {
                     status.logs.forEach(logEntry => {
-                        // Only add logs we haven't seen before
                         const logId = logEntry.timestamp + logEntry.message;
                         if (!processedLogs.has(logId)) {
                             addLog(logEntry.level, logEntry.message, new Date(logEntry.timestamp).toLocaleTimeString());
@@ -90,7 +479,6 @@
                     });
                 }
 
-                // Stop monitoring if chain is completed or failed
                 if (status.status === 'completed') {
                     addLog('success', '🎉 Attack chain completed successfully!');
                     updateProgress(100);
@@ -129,7 +517,7 @@
                         color: getNodeColor(node.status),
                         x: node.position.x,
                         y: node.position.y,
-                        title: `${node.name}\nStage: ${node.stage}\nAgent: ${node.agent}\nStatus: ${node.status}`,
+                        title: `${node.name}\\nStage: ${node.stage}\\nAgent: ${node.agent}\\nStatus: ${node.status}`,
                         font: { color: '#ffffff', size: 11 }
                     })),
                     edges: visualization.edges.map(edge => ({
@@ -156,7 +544,6 @@
                 network = new vis.Network(container, data, options);
                 addLog('debug', 'Attack flow visualization initialized');
             } else if (network && visualization) {
-                // Update existing network
                 const updatedNodes = visualization.nodes.map(node => ({
                     id: node.id,
                     color: getNodeColor(node.status)
@@ -254,7 +641,6 @@
             }
         }
 
-        // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             addLog('info', '🚀 Attack Chain Orchestrator ready');
             addLog('debug', 'Enter target and objective to begin');
