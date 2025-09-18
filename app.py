@@ -180,8 +180,12 @@ def create_attack_chain():
         if not target:
             return jsonify({"success": False, "error": "Target is required"})
         
+        print(f"Creating attack chain for target: {target}, objective: {objective}")
+        
         orchestrator = get_multi_agent_orchestrator()
         chain = orchestrator.create_attack_chain(target, objective)
+        
+        print(f"Attack chain created with ID: {chain.id}")
         
         return jsonify({
             "success": True,
@@ -189,6 +193,7 @@ def create_attack_chain():
             "message": "Attack chain created successfully"
         })
     except Exception as e:
+        print(f"Error creating attack chain: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 
@@ -196,6 +201,7 @@ def create_attack_chain():
 def execute_attack_chain(chain_id: str):
     """Execute attack chain"""
     try:
+        print(f"Starting execution for attack chain: {chain_id}")
         orchestrator = get_multi_agent_orchestrator()
         
         # Run execution in background thread since it's async
@@ -203,10 +209,11 @@ def execute_attack_chain(chain_id: str):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                print(f"[{chain_id}] Async execution started")
                 result = loop.run_until_complete(orchestrator.execute_attack_chain(chain_id))
-                print(f"Attack chain {chain_id} execution result: {result}")
+                print(f"[{chain_id}] Execution completed: {result.get('status', 'unknown')}")
             except Exception as e:
-                print(f"Attack chain {chain_id} execution error: {e}")
+                print(f"[{chain_id}] Execution error: {e}")
             finally:
                 loop.close()
         
@@ -218,6 +225,7 @@ def execute_attack_chain(chain_id: str):
             "message": "Attack chain execution started"
         })
     except Exception as e:
+        print(f"Error executing attack chain {chain_id}: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 
@@ -227,19 +235,47 @@ def get_attack_chain_status(chain_id: str):
     try:
         orchestrator = get_multi_agent_orchestrator()
         status = orchestrator.get_chain_status(chain_id)
+        
+        # Add server logs to the response if available
+        if "error" not in status:
+            # Get logs from orchestrator if available
+            logs = status.get("logs", [])
+            if logs:
+                print(f"[{chain_id}] Returning {len(logs)} log entries to client")
+        
         return jsonify(status)
     except Exception as e:
+        print(f"Error getting attack chain status {chain_id}: {e}")
         return jsonify({"error": str(e)})
+
+
+@app.get("/api/attack-chain/<chain_id>/logs")
+def get_attack_chain_logs(chain_id: str):
+    """Get real-time logs for attack chain"""
+    try:
+        orchestrator = get_multi_agent_orchestrator()
+        
+        # Get logs from orchestrator
+        if chain_id in orchestrator.execution_logs:
+            logs = orchestrator.execution_logs[chain_id]
+            return jsonify({"logs": logs})
+        else:
+            return jsonify({"logs": []})
+    except Exception as e:
+        print(f"Error getting logs for chain {chain_id}: {e}")
+        return jsonify({"error": str(e), "logs": []})
 
 
 @app.post("/api/attack-chain/<chain_id>/stop")
 def stop_attack_chain(chain_id: str):
     """Stop attack chain execution"""
     try:
+        print(f"Stopping attack chain: {chain_id}")
         orchestrator = get_multi_agent_orchestrator()
         result = orchestrator.stop_attack_chain(chain_id)
         return jsonify(result)
     except Exception as e:
+        print(f"Error stopping attack chain {chain_id}: {e}")
         return jsonify({"error": str(e)})
 
 
@@ -513,6 +549,7 @@ if __name__ == "__main__":
     print("  - OpenAI Support: ✅")
     print("  - Multi-Agent Orchestrator: ✅")
     print("  - Attack Chain Visualization: ✅")
+    print("  - Real-time Logging: ✅")
     print("  - Enhanced Reporting: ✅")
     
     app.run(host="0.0.0.0", port=port, debug=debug)
