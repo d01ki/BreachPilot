@@ -168,21 +168,32 @@ def attack_chain():
     return render_template("attack_chain.html")
 
 
-# Attack Chain API Endpoints
+# Enhanced Attack Chain API Endpoints
 @app.post("/api/attack-chain/create")
 def create_attack_chain():
-    """Create new attack chain"""
+    """Create new enhanced attack chain"""
     try:
         data = request.get_json()
         target = data.get("target")
         objective = data.get("objective", "domain_compromise")
+        use_enhanced = data.get("enhanced", True)  # デフォルトで強化版を使用
         
         if not target:
             return jsonify({"success": False, "error": "Target is required"})
         
-        print(f"Creating attack chain for target: {target}, objective: {objective}")
+        print(f"Creating {'enhanced' if use_enhanced else 'standard'} attack chain for target: {target}, objective: {objective}")
         
-        orchestrator = get_multi_agent_orchestrator()
+        if use_enhanced:
+            try:
+                from src.agents.enhanced_multi_agent_orchestrator import get_enhanced_multi_agent_orchestrator
+                orchestrator = get_enhanced_multi_agent_orchestrator()
+                print("Using Enhanced Multi-Agent Orchestrator with real tools and AI analysis")
+            except ImportError as e:
+                print(f"Enhanced orchestrator not available, falling back to standard: {e}")
+                orchestrator = get_multi_agent_orchestrator()
+        else:
+            orchestrator = get_multi_agent_orchestrator()
+        
         chain = orchestrator.create_attack_chain(target, objective)
         
         print(f"Attack chain created with ID: {chain.id}")
@@ -190,7 +201,8 @@ def create_attack_chain():
         return jsonify({
             "success": True,
             "chain_id": chain.id,
-            "message": "Attack chain created successfully"
+            "enhanced": use_enhanced,
+            "message": f"{'Enhanced' if use_enhanced else 'Standard'} attack chain created successfully"
         })
     except Exception as e:
         print(f"Error creating attack chain: {e}")
@@ -199,18 +211,33 @@ def create_attack_chain():
 
 @app.post("/api/attack-chain/<chain_id>/execute")
 def execute_attack_chain(chain_id: str):
-    """Execute attack chain"""
+    """Execute enhanced attack chain"""
     try:
         print(f"Starting execution for attack chain: {chain_id}")
-        orchestrator = get_multi_agent_orchestrator()
+        
+        # Try enhanced orchestrator first
+        try:
+            from src.agents.enhanced_multi_agent_orchestrator import get_enhanced_multi_agent_orchestrator
+            orchestrator = get_enhanced_multi_agent_orchestrator()
+            is_enhanced = True
+        except ImportError:
+            orchestrator = get_multi_agent_orchestrator()
+            is_enhanced = False
         
         # Run execution in background thread since it's async
         def run_async_execution():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                print(f"[{chain_id}] Async execution started")
-                result = loop.run_until_complete(orchestrator.execute_attack_chain(chain_id))
+                print(f"[{chain_id}] {'Enhanced' if is_enhanced else 'Standard'} async execution started")
+                
+                if is_enhanced:
+                    # Enhanced execution with real tools
+                    result = loop.run_until_complete(orchestrator.execute_enhanced_attack_chain(chain_id))
+                else:
+                    # Standard simulation execution
+                    result = loop.run_until_complete(orchestrator.execute_attack_chain(chain_id))
+                
                 print(f"[{chain_id}] Execution completed: {result.get('status', 'unknown')}")
             except Exception as e:
                 print(f"[{chain_id}] Execution error: {e}")
@@ -222,7 +249,8 @@ def execute_attack_chain(chain_id: str):
         
         return jsonify({
             "success": True,
-            "message": "Attack chain execution started"
+            "enhanced": is_enhanced,
+            "message": f"{'Enhanced' if is_enhanced else 'Standard'} attack chain execution started"
         })
     except Exception as e:
         print(f"Error executing attack chain {chain_id}: {e}")
@@ -231,14 +259,19 @@ def execute_attack_chain(chain_id: str):
 
 @app.get("/api/attack-chain/<chain_id>/status")
 def get_attack_chain_status(chain_id: str):
-    """Get attack chain status"""
+    """Get enhanced attack chain status"""
     try:
-        orchestrator = get_multi_agent_orchestrator()
+        # Try enhanced orchestrator first
+        try:
+            from src.agents.enhanced_multi_agent_orchestrator import get_enhanced_multi_agent_orchestrator
+            orchestrator = get_enhanced_multi_agent_orchestrator()
+        except ImportError:
+            orchestrator = get_multi_agent_orchestrator()
+        
         status = orchestrator.get_chain_status(chain_id)
         
-        # Add server logs to the response if available
+        # Add enhanced information if available
         if "error" not in status:
-            # Get logs from orchestrator if available
             logs = status.get("logs", [])
             if logs:
                 print(f"[{chain_id}] Returning {len(logs)} log entries to client")
@@ -251,12 +284,17 @@ def get_attack_chain_status(chain_id: str):
 
 @app.get("/api/attack-chain/<chain_id>/logs")
 def get_attack_chain_logs(chain_id: str):
-    """Get real-time logs for attack chain"""
+    """Get real-time logs for enhanced attack chain"""
     try:
-        orchestrator = get_multi_agent_orchestrator()
+        # Try enhanced orchestrator first
+        try:
+            from src.agents.enhanced_multi_agent_orchestrator import get_enhanced_multi_agent_orchestrator
+            orchestrator = get_enhanced_multi_agent_orchestrator()
+        except ImportError:
+            orchestrator = get_multi_agent_orchestrator()
         
         # Get logs from orchestrator
-        if chain_id in orchestrator.execution_logs:
+        if hasattr(orchestrator, 'execution_logs') and chain_id in orchestrator.execution_logs:
             logs = orchestrator.execution_logs[chain_id]
             return jsonify({"logs": logs})
         else:
@@ -268,10 +306,17 @@ def get_attack_chain_logs(chain_id: str):
 
 @app.post("/api/attack-chain/<chain_id>/stop")
 def stop_attack_chain(chain_id: str):
-    """Stop attack chain execution"""
+    """Stop enhanced attack chain execution"""
     try:
         print(f"Stopping attack chain: {chain_id}")
-        orchestrator = get_multi_agent_orchestrator()
+        
+        # Try enhanced orchestrator first
+        try:
+            from src.agents.enhanced_multi_agent_orchestrator import get_enhanced_multi_agent_orchestrator
+            orchestrator = get_enhanced_multi_agent_orchestrator()
+        except ImportError:
+            orchestrator = get_multi_agent_orchestrator()
+        
         result = orchestrator.stop_attack_chain(chain_id)
         return jsonify(result)
     except Exception as e:
@@ -281,13 +326,13 @@ def stop_attack_chain(chain_id: str):
 
 @app.post("/api/attack-chain/<chain_id>/pause")
 def pause_attack_chain(chain_id: str):
-    """Pause attack chain execution (same as stop for now)"""
+    """Pause enhanced attack chain execution (same as stop for now)"""
     return stop_attack_chain(chain_id)
 
 
 @app.post("/start")
 def start():
-    """Start penetration test job"""
+    """Start traditional penetration test job"""
     target = request.form.get("target", "").strip()
     authorize = request.form.get("authorize", "off") == "on"
     
@@ -542,12 +587,14 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     
-    print(f"Starting BreachPilot on port {port}")
+    print(f"Starting Enhanced BreachPilot on port {port}")
     print("AI Agent Features:")
-    print("  - CrewAI Integration: ✅")
+    print("  - CrewAI Integration: ✅") 
     print("  - Claude Analysis: ✅") 
     print("  - OpenAI Support: ✅")
-    print("  - Multi-Agent Orchestrator: ✅")
+    print("  - Enhanced Multi-Agent Orchestrator: ✅")
+    print("  - Real Tool Execution: ✅")
+    print("  - AI-Powered Analysis: ✅")
     print("  - Attack Chain Visualization: ✅")
     print("  - Real-time Logging: ✅")
     print("  - Enhanced Reporting: ✅")
