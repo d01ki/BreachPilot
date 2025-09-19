@@ -3,390 +3,523 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attack Chain Orchestrator - BreachPilot</title>
+    <title>BreachPilot - Multi-Agent Attack Chain</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
     <style>
         .glass {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
         }
         
-        .attack-chain-network {
-            height: 400px;
-            border: 1px solid #374151;
-            border-radius: 8px;
+        .gradient-text {
+            background: linear-gradient(45deg, #3b82f6, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
-        .timeline-item {
-            border-left: 3px solid #3b82f6;
-            padding-left: 1rem;
-            margin-bottom: 0.5rem;
-            position: relative;
-            animation: slideIn 0.3s ease-out;
+        .node {
+            transition: all 0.3s ease;
+            cursor: pointer;
         }
         
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
+        .node:hover {
+            transform: scale(1.1);
         }
         
-        .timeline-item::before {
-            content: '';
-            position: absolute;
-            left: -6px;
-            top: 0.5rem;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #3b82f6;
+        .node-active {
+            animation: pulse-glow 2s ease-in-out infinite;
         }
         
-        .agent-card {
+        .node-completed {
+            filter: brightness(1.2);
+        }
+        
+        .node-failed {
+            filter: hue-rotate(0deg) brightness(0.8);
+        }
+        
+        .link {
             transition: all 0.3s ease;
         }
         
+        .link-active {
+            stroke-width: 3px;
+            animation: flow 2s linear infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { 
+                filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.8));
+            }
+            50% { 
+                filter: drop-shadow(0 0 15px rgba(59, 130, 246, 1));
+            }
+        }
+        
+        @keyframes flow {
+            0% { stroke-dashoffset: 20; }
+            100% { stroke-dashoffset: 0; }
+        }
+        
+        .agent-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
         .agent-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
         }
         
-        .status-idle { border-left: 4px solid #10b981; }
-        .status-busy { border-left: 4px solid #f59e0b; }
-        .status-error { border-left: 4px solid #ef4444; }
-        
-        .log-container {
-            height: 300px;
-            overflow-y: auto;
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 12px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-
-        .log-entry {
-            margin-bottom: 4px;
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        }
-
-        .log-timestamp {
-            color: #64748b;
-            min-width: 60px;
-            font-size: 10px;
-        }
-
-        .log-level-info { color: #3b82f6; }
-        .log-level-success { color: #10b981; }
-        .log-level-warning { color: #f59e0b; }
-        .log-level-error { color: #ef4444; }
-        .log-level-debug { color: #8b5cf6; }
-
-        .progress-ring {
-            width: 120px;
-            height: 120px;
-        }
-
-        .progress-ring-circle {
-            stroke: #374151;
-            stroke-width: 8;
-            fill: transparent;
-            r: 52;
-            cx: 60;
-            cy: 60;
-        }
-
-        .progress-ring-progress {
-            stroke: #3b82f6;
-            stroke-width: 8;
-            fill: transparent;
-            r: 52;
-            cx: 60;
-            cy: 60;
-            stroke-dasharray: 326.73;
-            stroke-dashoffset: 326.73;
-            transition: stroke-dashoffset 0.5s ease;
-            transform: rotate(-90deg);
-            transform-origin: center;
-        }
-
-        .pulse {
+        .status-indicator {
             animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .cyber-grid {
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <nav class="glass border-b border-gray-700 p-4">
+<body class="bg-slate-900 text-white min-h-screen cyber-grid">
+    <!-- Navigation -->
+    <nav class="glass border-b border-gray-700 p-4 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                BreachPilot - Multi-Agent Attack Chain Orchestrator
-            </h1>
+            <div class="flex items-center space-x-4">
+                <h1 class="text-2xl font-bold gradient-text">BreachPilot</h1>
+                <div class="text-xs text-purple-400 bg-purple-500/10 px-2 py-1 rounded">Multi-Agent Chain</div>
+            </div>
             <div class="flex space-x-4">
-                <a href="/" class="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">Home</a>
-                <a href="/settings" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700 transition">Settings</a>
+                <a href="/" class="px-4 py-2 bg-gray-600/20 border border-gray-500/30 rounded-lg hover:bg-gray-600/30 transition">
+                    🏠 Home
+                </a>
+                <button id="stop-chain-btn" onclick="stopChain()" class="px-4 py-2 bg-red-600/20 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition hidden">
+                    ⏹️ Stop Chain
+                </button>
             </div>
         </div>
     </nav>
 
     <div class="container mx-auto p-6">
-        <!-- Feature Comparison Info -->
-        <div class="glass rounded-lg p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">🚀 Advanced Multi-Agent Attack Chain</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-lg p-4">
-                    <h3 class="text-lg font-medium text-purple-300 mb-3">🔗 Attack Chain Orchestrator (This Page)</h3>
-                    <ul class="text-sm text-gray-300 space-y-1">
-                        <li>• <strong>Multi-Agent Coordination</strong> - Specialized AI agents work in parallel</li>
-                        <li>• <strong>Real-time Visualization</strong> - Live attack flow and progress tracking</li>
-                        <li>• <strong>Fast Simulation</strong> - Quick demonstration of attack scenarios</li>
-                        <li>• <strong>Dynamic Task Management</strong> - Intelligent dependency handling</li>
-                        <li>• <strong>Live Logging</strong> - Real-time execution feedback</li>
-                    </ul>
-                </div>
-                <div class="bg-gradient-to-r from-green-900/30 to-indigo-900/30 rounded-lg p-4">
-                    <h3 class="text-lg font-medium text-green-300 mb-3">⚙️ Traditional Penetration Test</h3>
-                    <ul class="text-sm text-gray-300 space-y-1">
-                        <li>• <strong>Sequential Execution</strong> - Step-by-step traditional workflow</li>
-                        <li>• <strong>Real Scanning</strong> - Actual Nmap scans and tool execution</li>
-                        <li>• <strong>Comprehensive Reports</strong> - Full PDF/Markdown documentation</li>
-                        <li>• <strong>Single AI Agent</strong> - One agent handles all phases</li>
-                        <li>• <strong>Production Ready</strong> - Suitable for actual penetration testing</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="mt-4 text-center">
-                <a href="/" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                    </svg>
-                    Try Traditional Penetration Test
-                </a>
-            </div>
-        </div>
-
-        <!-- Attack Chain Creation -->
-        <div class="glass rounded-lg p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">Create Multi-Agent Attack Chain</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Target</label>
-                    <input type="text" id="target" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg" 
-                           placeholder="192.168.1.10 or dc.example.com">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Objective</label>
-                    <select id="objective" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg">
-                        <option value="domain_compromise">Domain Compromise</option>
-                        <option value="privilege_escalation">Privilege Escalation</option>
-                        <option value="data_exfiltration">Data Exfiltration</option>
-                        <option value="persistence">Persistence</option>
-                    </select>
-                </div>
-                <div class="flex items-end">
-                    <button onclick="createAttackChain()" 
-                            class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:from-purple-700 hover:to-blue-700 transition"
-                            id="create-btn">
-                        🚀 Create & Execute Chain
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Dashboard -->
-        <div id="main-dashboard" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" style="display: none;">
-            <!-- Progress Circle -->
-            <div class="glass rounded-lg p-6 text-center">
-                <h3 class="text-lg font-semibold mb-4">Chain Progress</h3>
-                <div class="flex justify-center mb-4">
-                    <svg class="progress-ring">
-                        <circle class="progress-ring-circle"></circle>
-                        <circle class="progress-ring-progress" id="progress-circle"></circle>
-                    </svg>
-                </div>
-                <div id="progress-text" class="text-2xl font-bold mb-2">0%</div>
-                <div id="progress-status" class="text-sm text-gray-400">Initializing...</div>
-                
-                <div class="mt-6 space-y-2">
-                    <button id="pause-btn" onclick="pauseAttackChain()" 
-                            class="w-full px-4 py-2 bg-yellow-600 rounded-lg hover:bg-yellow-700 transition">
-                        ⏸️ Pause Chain
-                    </button>
-                    <button id="stop-btn" onclick="stopAttackChain()" 
-                            class="w-full px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition">
-                        ⏹️ Stop Chain
-                    </button>
-                </div>
-            </div>
-
-            <!-- Agent Status -->
-            <div class="glass rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-4">🤖 Agent Status</h3>
-                <div id="agent-status" class="space-y-3">
-                    <div class="text-gray-400 text-center py-8">No agents active</div>
-                </div>
-            </div>
-
-            <!-- Current Task -->
-            <div class="glass rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-4">⚡ Current Task</h3>
-                <div id="current-task" class="text-center py-8 text-gray-400">
-                    <div class="animate-pulse">
-                        <div class="h-4 bg-gray-700 rounded mb-2"></div>
-                        <div class="h-3 bg-gray-700 rounded w-2/3 mx-auto"></div>
+        <!-- Attack Chain Setup -->
+        <div id="setup-section" class="glass rounded-lg p-6 mb-6">
+            <h2 class="text-2xl font-semibold mb-4 gradient-text">Launch Multi-Agent Attack Chain</h2>
+            
+            <form id="chain-form" class="space-y-4">
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Target</label>
+                        <input type="text" id="target" required
+                               class="w-full p-3 bg-slate-800/50 border border-blue-500/30 rounded-lg focus:border-blue-400 focus:outline-none"
+                               placeholder="e.g., 10.10.10.40, 10.10.10.75, 10.10.10.14">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Objective</label>
+                        <select id="objective" class="w-full p-3 bg-slate-800/50 border border-blue-500/30 rounded-lg">
+                            <option value="full_compromise">Full System Compromise</option>
+                            <option value="data_exfiltration">Data Exfiltration</option>
+                            <option value="privilege_escalation">Privilege Escalation</option>
+                            <option value="persistence">Maintain Persistence</option>
+                        </select>
                     </div>
                 </div>
-            </div>
+                
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="authorize" class="text-blue-500">
+                    <label for="authorize" class="text-sm text-gray-400">I authorize multi-agent testing on this target</label>
+                </div>
+                
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition transform hover:scale-105">
+                    ⚡ Launch Attack Chain
+                </button>
+            </form>
         </div>
 
-        <!-- Attack Chain Visualization -->
-        <div class="glass rounded-lg p-6 mb-6" id="visualization-container" style="display: none;">
-            <h3 class="text-lg font-semibold mb-4">🔗 Attack Flow Visualization</h3>
-            <div id="attack-chain-network" class="attack-chain-network bg-gray-800 rounded-lg"></div>
-        </div>
-
-        <!-- Real-time Logs -->
-        <div class="glass rounded-lg p-6 mb-6" id="logs-container" style="display: none;">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">📋 Real-time Execution Logs</h3>
-                <div class="flex space-x-2">
-                    <button onclick="clearLogs()" class="px-3 py-1 bg-gray-600 rounded text-sm hover:bg-gray-700 transition">
-                        🗑️ Clear
-                    </button>
-                    <button onclick="toggleAutoScroll()" id="autoscroll-btn" class="px-3 py-1 bg-blue-600 rounded text-sm hover:bg-blue-700 transition">
-                        Auto-scroll: ON
-                    </button>
+        <!-- Chain Status -->
+        <div id="status-section" class="hidden">
+            <!-- Agent Status Cards -->
+            <div class="grid md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">🔍</div>
+                    <div class="text-sm font-medium">Recon Specialist</div>
+                    <div id="agent-recon-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
+                </div>
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">🛡️</div>
+                    <div class="text-sm font-medium">Vuln Analyst</div>
+                    <div id="agent-vuln-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
+                </div>
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">💥</div>
+                    <div class="text-sm font-medium">Exploit Engineer</div>
+                    <div id="agent-exploit-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
+                </div>
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">🔓</div>
+                    <div class="text-sm font-medium">Post-Exploit</div>
+                    <div id="agent-post-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
+                </div>
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">🔗</div>
+                    <div class="text-sm font-medium">Persistence</div>
+                    <div id="agent-persist-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
+                </div>
+                <div class="agent-card glass rounded-lg p-4 text-center">
+                    <div class="text-2xl mb-2">🎮</div>
+                    <div class="text-sm font-medium">C2 Controller</div>
+                    <div id="agent-c2-status" class="status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2"></div>
                 </div>
             </div>
-            <div id="logs" class="log-container"></div>
-        </div>
 
-        <!-- Timeline -->
-        <div class="glass rounded-lg p-6" id="timeline-container" style="display: none;">
-            <h3 class="text-lg font-semibold mb-4">⏰ Attack Timeline</h3>
-            <div id="attack-timeline" class="max-h-64 overflow-y-auto">
-                <div class="text-gray-400 text-center py-8">No timeline events</div>
+            <!-- Visualization Panel -->
+            <div class="glass rounded-lg p-6 mb-6">
+                <h3 class="text-xl font-semibold mb-4">Attack Flow Visualization</h3>
+                <div id="visualization" class="bg-slate-800/50 rounded-lg border border-blue-500/20" style="height: 500px;"></div>
+            </div>
+
+            <!-- Live Logs -->
+            <div class="glass rounded-lg p-6 mb-6">
+                <h3 class="text-xl font-semibold mb-4">Live Agent Logs</h3>
+                <div id="live-logs" class="bg-black rounded p-4 h-64 overflow-y-auto font-mono text-sm">
+                    <div class="text-green-400">Waiting for chain execution...</div>
+                </div>
+            </div>
+
+            <!-- Progress Summary -->
+            <div id="progress-summary" class="grid md:grid-cols-4 gap-4">
+                <div class="glass rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-blue-400" id="total-tasks">0</div>
+                    <div class="text-sm text-gray-400">Total Tasks</div>
+                </div>
+                <div class="glass rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-green-400" id="completed-tasks">0</div>
+                    <div class="text-sm text-gray-400">Completed</div>
+                </div>
+                <div class="glass rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-purple-400" id="active-agents">0</div>
+                    <div class="text-sm text-gray-400">Active Agents</div>
+                </div>
+                <div class="glass rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-cyan-400" id="tools-executed">0</div>
+                    <div class="text-sm text-gray-400">Tools Executed</div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         let currentChainId = null;
-        let network = null;
         let updateInterval = null;
-        let autoScroll = true;
-        let logCounter = 0;
-        let processedLogs = new Set();
+        let svg = null;
+        let simulation = null;
 
-        function addLog(level, message, timestamp = null) {
-            const logsContainer = document.getElementById('logs');
-            const time = timestamp || new Date().toLocaleTimeString();
-            logCounter++;
+        // Initialize beautiful force-directed graph visualization
+        function initVisualization() {
+            const container = d3.select("#visualization");
+            container.selectAll("*").remove();
+
+            const width = container.node().getBoundingClientRect().width;
+            const height = 500;
+
+            svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .style("background", "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)");
+
+            // Add sophisticated gradient definitions
+            const defs = svg.append("defs");
             
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            logEntry.innerHTML = `
-                <span class="log-timestamp">${time}</span>
-                <span class="log-level-${level}">[${level.toUpperCase()}]</span>
-                <span class="text-gray-300">${message}</span>
-            `;
-            
-            logsContainer.appendChild(logEntry);
-            
-            if (autoScroll) {
-                logsContainer.scrollTop = logsContainer.scrollHeight;
+            // Node gradients for different states
+            const activeGradient = defs.append("radialGradient")
+                .attr("id", "activeGradient")
+                .attr("cx", "30%")
+                .attr("cy", "30%");
+            activeGradient.append("stop").attr("offset", "0%").attr("stop-color", "#60a5fa");
+            activeGradient.append("stop").attr("offset", "100%").attr("stop-color", "#1e40af");
+
+            const completedGradient = defs.append("radialGradient")
+                .attr("id", "completedGradient")
+                .attr("cx", "30%")
+                .attr("cy", "30%");
+            completedGradient.append("stop").attr("offset", "0%").attr("stop-color", "#34d399");
+            completedGradient.append("stop").attr("offset", "100%").attr("stop-color", "#047857");
+
+            const pendingGradient = defs.append("radialGradient")
+                .attr("id", "pendingGradient")
+                .attr("cx", "30%")
+                .attr("cy", "30%");
+            pendingGradient.append("stop").attr("offset", "0%").attr("stop-color", "#94a3b8");
+            pendingGradient.append("stop").attr("offset", "100%").attr("stop-color", "#475569");
+
+            // Enhanced arrow marker
+            defs.append("marker")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "-0 -5 10 10")
+                .attr("refX", 25)
+                .attr("refY", 0)
+                .attr("orient", "auto")
+                .attr("markerWidth", 10)
+                .attr("markerHeight", 10)
+                .append("path")
+                .attr("d", "M 0,-5 L 10,0 L 0,5")
+                .attr("fill", "#64748b")
+                .attr("opacity", 0.8);
+
+            // Create force simulation with enhanced physics
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(150))
+                .force("charge", d3.forceManyBody().strength(-400))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(50))
+                .force("x", d3.forceX(width / 2).strength(0.1))
+                .force("y", d3.forceY(height / 2).strength(0.1));
+        }
+
+        function updateVisualization(data) {
+            if (!svg || !data.visualization) return;
+
+            const nodes = data.visualization.nodes || [];
+            const links = data.visualization.edges?.map(e => ({from: e.from, to: e.to})) || [];
+
+            // Create link data for D3
+            const linkData = links.map(l => ({
+                source: l.from,
+                target: l.to
+            }));
+
+            // Update links with beautiful styling
+            const link = svg.selectAll(".link")
+                .data(linkData, d => `${d.source}-${d.target}`);
+
+            link.exit().remove();
+
+            const linkEnter = link.enter().append("line")
+                .attr("class", "link")
+                .attr("stroke", "#475569")
+                .attr("stroke-width", 2)
+                .attr("stroke-dasharray", "8,4")
+                .attr("marker-end", "url(#arrowhead)")
+                .attr("opacity", 0);
+
+            linkEnter.transition()
+                .duration(800)
+                .attr("opacity", 0.7);
+
+            const linkUpdate = linkEnter.merge(link);
+
+            // Update nodes with enhanced visuals
+            const node = svg.selectAll(".node")
+                .data(nodes, d => d.id);
+
+            node.exit()
+                .transition()
+                .duration(500)
+                .attr("transform", "scale(0)")
+                .remove();
+
+            const nodeEnter = node.enter().append("g")
+                .attr("class", "node")
+                .style("cursor", "pointer")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            // Outer ring for status indication
+            nodeEnter.append("circle")
+                .attr("class", "node-ring")
+                .attr("r", 35)
+                .attr("fill", "none")
+                .attr("stroke", "#1e293b")
+                .attr("stroke-width", 3)
+                .attr("opacity", 0)
+                .transition()
+                .duration(800)
+                .attr("opacity", 0.8);
+
+            // Main node circle with gradients
+            nodeEnter.append("circle")
+                .attr("class", "node-circle")
+                .attr("r", 0)
+                .attr("fill", d => getNodeGradient(d.status))
+                .attr("stroke", "#1e293b")
+                .attr("stroke-width", 2)
+                .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.3))")
+                .transition()
+                .duration(800)
+                .attr("r", 28);
+
+            // Agent icons with better positioning
+            nodeEnter.append("text")
+                .attr("class", "node-icon")
+                .attr("text-anchor", "middle")
+                .attr("dy", ".35em")
+                .attr("font-size", "18px")
+                .text(d => getAgentIcon(d.agent))
+                .attr("opacity", 0)
+                .transition()
+                .duration(800)
+                .delay(300)
+                .attr("opacity", 1);
+
+            // Status indicators
+            nodeEnter.append("circle")
+                .attr("class", "status-dot")
+                .attr("cx", 20)
+                .attr("cy", -20)
+                .attr("r", 0)
+                .attr("fill", d => getStatusColor(d.status))
+                .transition()
+                .duration(500)
+                .delay(600)
+                .attr("r", 6);
+
+            // Enhanced labels with background
+            const labelGroup = nodeEnter.append("g")
+                .attr("class", "label-group")
+                .attr("transform", "translate(0, 45)");
+
+            labelGroup.append("rect")
+                .attr("class", "label-bg")
+                .attr("x", -30)
+                .attr("y", -8)
+                .attr("width", 60)
+                .attr("height", 16)
+                .attr("rx", 8)
+                .attr("fill", "rgba(15, 23, 42, 0.9)")
+                .attr("stroke", "#334155")
+                .attr("stroke-width", 1)
+                .attr("opacity", 0)
+                .transition()
+                .duration(500)
+                .delay(800)
+                .attr("opacity", 1);
+
+            labelGroup.append("text")
+                .attr("class", "node-label")
+                .attr("text-anchor", "middle")
+                .attr("dy", ".35em")
+                .attr("font-size", "9px")
+                .attr("fill", "#94a3b8")
+                .text(d => d.name.substring(0, 10) + (d.name.length > 10 ? "..." : ""))
+                .attr("opacity", 0)
+                .transition()
+                .duration(500)
+                .delay(800)
+                .attr("opacity", 1);
+
+            const nodeUpdate = nodeEnter.merge(node);
+
+            // Update existing nodes
+            nodeUpdate.select(".node-circle")
+                .transition()
+                .duration(500)
+                .attr("fill", d => getNodeGradient(d.status))
+                .style("filter", d => {
+                    if (d.status === "running") return "drop-shadow(0 0 15px rgba(59, 130, 246, 0.8))";
+                    if (d.status === "completed") return "drop-shadow(0 0 10px rgba(16, 185, 129, 0.6))";
+                    return "drop-shadow(0 4px 8px rgba(0,0,0,0.3))";
+                });
+
+            nodeUpdate.select(".node-ring")
+                .transition()
+                .duration(500)
+                .attr("stroke", d => getStatusColor(d.status))
+                .attr("stroke-dasharray", d => d.status === "running" ? "5,5" : "none")
+                .style("animation", d => d.status === "running" ? "spin 2s linear infinite" : "none");
+
+            nodeUpdate.select(".status-dot")
+                .transition()
+                .duration(300)
+                .attr("fill", d => getStatusColor(d.status));
+
+            // Update simulation with better forces
+            simulation.nodes(nodes);
+            simulation.force("link").links(linkData);
+            simulation.alpha(0.5).restart();
+
+            // Enhanced tick function for smoother animation
+            simulation.on("tick", () => {
+                linkUpdate
+                    .attr("x1", d => Math.max(35, Math.min(svg.attr("width") - 35, d.source.x)))
+                    .attr("y1", d => Math.max(35, Math.min(svg.attr("height") - 35, d.source.y)))
+                    .attr("x2", d => Math.max(35, Math.min(svg.attr("width") - 35, d.target.x)))
+                    .attr("y2", d => Math.max(35, Math.min(svg.attr("height") - 35, d.target.y)));
+
+                nodeUpdate
+                    .attr("transform", d => {
+                        d.x = Math.max(35, Math.min(svg.attr("width") - 35, d.x));
+                        d.y = Math.max(35, Math.min(svg.attr("height") - 35, d.y));
+                        return `translate(${d.x},${d.y})`;
+                    });
+            });
+        }
+
+        function getNodeGradient(status) {
+            switch (status) {
+                case "running": return "url(#activeGradient)";
+                case "completed": return "url(#completedGradient)";
+                case "failed": return "#ef4444";
+                default: return "url(#pendingGradient)";
             }
-            
-            if (logCounter > 500) {
-                logsContainer.removeChild(logsContainer.firstChild);
-                logCounter--;
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case "pending": return "#64748b";
+                case "running": return "#3b82f6";
+                case "completed": return "#10b981";
+                case "failed": return "#ef4444";
+                default: return "#64748b";
             }
         }
 
-        function clearLogs() {
-            document.getElementById('logs').innerHTML = '';
-            logCounter = 0;
-            processedLogs.clear();
+        function getAgentIcon(agent) {
+            const icons = {
+                "recon_specialist": "🔍",
+                "vulnerability_analyst": "🛡️",
+                "exploit_engineer": "💥",
+                "post_exploit_specialist": "🔓",
+                "persistence_expert": "🔗",
+                "command_controller": "🎮"
+            };
+            return icons[agent] || "🤖";
         }
 
-        function toggleAutoScroll() {
-            autoScroll = !autoScroll;
-            const btn = document.getElementById('autoscroll-btn');
-            btn.textContent = `Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
-            btn.className = autoScroll ? 
-                'px-3 py-1 bg-blue-600 rounded text-sm hover:bg-blue-700 transition' :
-                'px-3 py-1 bg-gray-600 rounded text-sm hover:bg-gray-700 transition';
+        // Enhanced drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
         }
 
-        function updateProgress(progress) {
-            const circle = document.getElementById('progress-circle');
-            const text = document.getElementById('progress-text');
-            const status = document.getElementById('progress-status');
-            
-            const circumference = 2 * Math.PI * 52;
-            const offset = circumference - (progress / 100) * circumference;
-            
-            circle.style.strokeDashoffset = offset;
-            text.textContent = `${Math.round(progress)}%`;
-            
-            if (progress === 0) {
-                status.textContent = 'Initializing...';
-            } else if (progress < 20) {
-                status.textContent = 'Reconnaissance';
-            } else if (progress < 40) {
-                status.textContent = 'Scanning';
-            } else if (progress < 60) {
-                status.textContent = 'Vulnerability Analysis';
-            } else if (progress < 80) {
-                status.textContent = 'Exploitation';
-            } else if (progress < 100) {
-                status.textContent = 'Post-Exploitation';
-            } else {
-                status.textContent = 'Completed';
-            }
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
         }
 
-        function updateCurrentTask(taskName, agent) {
-            const container = document.getElementById('current-task');
-            if (taskName) {
-                container.innerHTML = `
-                    <div class="text-left">
-                        <div class="text-lg font-medium text-blue-400 mb-2">${taskName}</div>
-                        <div class="text-sm text-gray-400">Assigned to: ${agent || 'AI Agent'}</div>
-                        <div class="flex items-center mt-3">
-                            <div class="pulse w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                            <span class="text-xs text-blue-300">Executing...</span>
-                        </div>
-                    </div>
-                `;
-            } else {
-                container.innerHTML = '<div class="text-gray-400">No active tasks</div>';
-            }
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
         }
 
-        async function createAttackChain() {
+        // Form submission
+        document.getElementById('chain-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
             const target = document.getElementById('target').value;
             const objective = document.getElementById('objective').value;
-            const createBtn = document.getElementById('create-btn');
+            const authorize = document.getElementById('authorize').checked;
 
-            if (!target) {
-                alert('Please enter a target');
+            if (!authorize) {
+                alert('Please authorize the attack chain execution');
                 return;
             }
-
-            createBtn.disabled = true;
-            createBtn.innerHTML = '⏳ Creating...';
-            
-            addLog('info', `Creating attack chain for target: ${target}`);
 
             try {
                 const response = await fetch('/api/attack-chain/create', {
@@ -395,256 +528,177 @@
                     body: JSON.stringify({ target, objective })
                 });
 
-                const result = await response.json();
-                if (result.success) {
-                    currentChainId = result.chain_id;
-                    addLog('success', `Attack chain created successfully (ID: ${currentChainId.substring(0, 8)}...)`);
-                    
-                    document.getElementById('main-dashboard').style.display = 'grid';
-                    document.getElementById('visualization-container').style.display = 'block';
-                    document.getElementById('logs-container').style.display = 'block';
-                    document.getElementById('timeline-container').style.display = 'block';
-                    
-                    addLog('info', 'Starting attack chain execution...');
-                    executeAttackChain(currentChainId);
-                    startMonitoring();
+                const data = await response.json();
+
+                if (data.chain_id) {
+                    currentChainId = data.chain_id;
+                    document.getElementById('setup-section').classList.add('hidden');
+                    document.getElementById('status-section').classList.remove('hidden');
+                    document.getElementById('stop-chain-btn').classList.remove('hidden');
+
+                    initVisualization();
+                    startChainExecution();
+                    updateInterval = setInterval(updateChainStatus, 2000);
                 } else {
-                    addLog('error', `Failed to create attack chain: ${result.error}`);
-                    alert('Failed to create attack chain: ' + result.error);
+                    alert('Failed to create attack chain: ' + (data.error || 'Unknown error'));
                 }
             } catch (error) {
-                console.error('Error creating attack chain:', error);
-                addLog('error', `Error creating attack chain: ${error.message}`);
+                console.error('Error:', error);
                 alert('Failed to create attack chain');
-            } finally {
-                createBtn.disabled = false;
-                createBtn.innerHTML = '🚀 Create & Execute Chain';
             }
-        }
+        });
 
-        async function executeAttackChain(chainId) {
+        async function startChainExecution() {
             try {
-                addLog('info', 'Sending execution request to server...');
-                const response = await fetch(`/api/attack-chain/${chainId}/execute`, {
+                await fetch(`/api/attack-chain/${currentChainId}/execute`, {
                     method: 'POST'
                 });
-                const result = await response.json();
-                
-                if (result.success) {
-                    addLog('success', 'Attack chain execution started successfully');
-                } else {
-                    addLog('error', `Failed to start execution: ${result.error}`);
-                }
             } catch (error) {
-                console.error('Error executing attack chain:', error);
-                addLog('error', `Error executing attack chain: ${error.message}`);
+                console.error('Error starting chain execution:', error);
             }
-        }
-
-        function startMonitoring() {
-            if (updateInterval) clearInterval(updateInterval);
-            
-            addLog('debug', 'Starting real-time monitoring...');
-            
-            updateInterval = setInterval(async () => {
-                if (currentChainId) {
-                    await updateChainStatus();
-                }
-            }, 1000);
         }
 
         async function updateChainStatus() {
+            if (!currentChainId) return;
+
             try {
                 const response = await fetch(`/api/attack-chain/${currentChainId}/status`);
-                const status = await response.json();
-                
-                if (status.error) {
-                    addLog('error', `Status check failed: ${status.error}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Chain status error:', data.error);
                     return;
                 }
 
-                updateProgress(status.progress || 0);
-                updateVisualization(status);
-                updateAgentStatus(status.agent_states);
-                updateTimeline(status.recent_timeline);
-                updateCurrentTaskDisplay(status);
+                // Update visualization
+                updateVisualization(data);
 
-                if (status.logs && status.logs.length > 0) {
-                    status.logs.forEach(logEntry => {
-                        const logId = logEntry.timestamp + logEntry.message;
-                        if (!processedLogs.has(logId)) {
-                            addLog(logEntry.level, logEntry.message, new Date(logEntry.timestamp).toLocaleTimeString());
-                            processedLogs.add(logId);
-                        }
-                    });
+                // Update agent status indicators
+                updateAgentStatuses(data.agent_states || []);
+
+                // Update progress summary
+                updateProgressSummary(data);
+
+                // Update logs
+                updateLiveLogs(data.logs || []);
+
+                // Check if completed
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(updateInterval);
+                    document.getElementById('stop-chain-btn').classList.add('hidden');
                 }
 
-                if (status.status === 'completed') {
-                    addLog('success', '🎉 Attack chain completed successfully!');
-                    updateProgress(100);
-                    clearInterval(updateInterval);
-                } else if (status.status === 'failed') {
-                    addLog('error', '❌ Attack chain execution failed');
-                    clearInterval(updateInterval);
-                } else if (status.status === 'stopped') {
-                    addLog('warning', '⏸️ Attack chain was stopped');
-                    clearInterval(updateInterval);
-                }
             } catch (error) {
-                addLog('error', `Error updating chain status: ${error.message}`);
+                console.error('Error updating chain status:', error);
             }
         }
 
-        function updateCurrentTaskDisplay(status) {
-            const busyAgent = status.agent_states?.find(agent => agent.status === 'busy');
-            if (busyAgent) {
-                const roleName = busyAgent.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                updateCurrentTask(`${roleName} Active`, busyAgent.id);
-            } else {
-                updateCurrentTask(null);
-            }
-        }
-
-        function updateVisualization(status) {
-            const visualization = status.visualization;
-            
-            if (!network && visualization) {
-                const container = document.getElementById('attack-chain-network');
-                const data = {
-                    nodes: visualization.nodes.map(node => ({
-                        id: node.id,
-                        label: node.name,
-                        color: getNodeColor(node.status),
-                        x: node.position.x,
-                        y: node.position.y,
-                        title: `${node.name}\\nStage: ${node.stage}\\nAgent: ${node.agent}\\nStatus: ${node.status}`,
-                        font: { color: '#ffffff', size: 11 }
-                    })),
-                    edges: visualization.edges.map(edge => ({
-                        from: edge.from,
-                        to: edge.to,
-                        arrows: 'to',
-                        color: '#64748b'
-                    }))
-                };
-
-                const options = {
-                    physics: { enabled: false },
-                    layout: { hierarchical: false },
-                    nodes: {
-                        shape: 'box',
-                        margin: 8,
-                        borderWidth: 2
-                    },
-                    edges: {
-                        smooth: { type: 'cubicBezier' }
-                    }
-                };
-
-                network = new vis.Network(container, data, options);
-                addLog('debug', 'Attack flow visualization initialized');
-            } else if (network && visualization) {
-                const updatedNodes = visualization.nodes.map(node => ({
-                    id: node.id,
-                    color: getNodeColor(node.status)
-                }));
-                network.setData({
-                    nodes: network.body.data.nodes.update(updatedNodes),
-                    edges: network.body.data.edges
-                });
-            }
-        }
-
-        function getNodeColor(status) {
-            const colors = {
-                'pending': '#6b7280',
-                'running': '#3b82f6',
-                'completed': '#10b981',
-                'failed': '#ef4444'
+        function updateAgentStatuses(agentStates) {
+            const statusElements = {
+                "recon_specialist": "agent-recon-status",
+                "vulnerability_analyst": "agent-vuln-status", 
+                "exploit_engineer": "agent-exploit-status",
+                "post_exploit_specialist": "agent-post-status",
+                "persistence_expert": "agent-persist-status",
+                "command_controller": "agent-c2-status"
             };
-            return colors[status] || '#6b7280';
-        }
 
-        function updateAgentStatus(agents) {
-            const container = document.getElementById('agent-status');
-            
-            if (!agents || agents.length === 0) {
-                container.innerHTML = '<div class="text-gray-400 text-center py-8">No agents active</div>';
-                return;
-            }
-
-            container.innerHTML = agents.map(agent => `
-                <div class="agent-card bg-gray-800 rounded-lg p-3 status-${agent.status}">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <div class="font-medium text-sm">${agent.role.replace('_', ' ').toUpperCase()}</div>
-                            <div class="text-xs text-gray-400">Completed: ${agent.completed_tasks_count}</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-xs font-medium ${agent.status === 'busy' ? 'text-yellow-400' : agent.status === 'idle' ? 'text-green-400' : 'text-red-400'}">
-                                ${agent.status === 'busy' ? '🔄' : agent.status === 'idle' ? '✅' : '❌'} ${agent.status.toUpperCase()}
-                            </div>
-                            ${agent.current_task ? `<div class="text-xs text-gray-500">Working</div>` : ''}
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function updateTimeline(timeline) {
-            const container = document.getElementById('attack-timeline');
-            
-            if (!timeline || timeline.length === 0) {
-                container.innerHTML = '<div class="text-gray-400 text-center py-8">No timeline events</div>';
-                return;
-            }
-
-            container.innerHTML = timeline.slice(-10).map(event => `
-                <div class="timeline-item">
-                    <div class="text-xs text-gray-400">${new Date(event.timestamp).toLocaleTimeString()}</div>
-                    <div class="text-white text-sm">${event.message}</div>
-                </div>
-            `).join('');
-        }
-
-        async function pauseAttackChain() {
-            if (!currentChainId) return;
-            
-            addLog('warning', 'Pausing attack chain...');
-            try {
-                const response = await fetch(`/api/attack-chain/${currentChainId}/pause`, {
-                    method: 'POST'
-                });
-                const result = await response.json();
-                addLog('info', 'Attack chain paused');
-            } catch (error) {
-                addLog('error', `Error pausing attack chain: ${error.message}`);
-            }
-        }
-
-        async function stopAttackChain() {
-            if (!currentChainId) return;
-            
-            addLog('warning', 'Stopping attack chain...');
-            try {
-                const response = await fetch(`/api/attack-chain/${currentChainId}/stop`, {
-                    method: 'POST'
-                });
-                const result = await response.json();
-                addLog('success', 'Attack chain stopped successfully');
-                
-                if (updateInterval) {
-                    clearInterval(updateInterval);
+            // Reset all to idle
+            Object.values(statusElements).forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.className = "status-indicator w-3 h-3 bg-gray-500 rounded-full mx-auto mt-2";
                 }
+            });
+
+            // Update based on agent states
+            agentStates.forEach(agent => {
+                const elementId = statusElements[agent.role];
+                const element = document.getElementById(elementId);
+                
+                if (element) {
+                    let colorClass = "bg-gray-500";
+                    if (agent.status === "busy") colorClass = "bg-blue-500";
+                    else if (agent.completed_tasks_count > 0) colorClass = "bg-green-500";
+                    
+                    element.className = `status-indicator w-3 h-3 ${colorClass} rounded-full mx-auto mt-2`;
+                }
+            });
+        }
+
+        function updateProgressSummary(data) {
+            document.getElementById('total-tasks').textContent = data.performance_metrics?.total_tools || 0;
+            document.getElementById('completed-tasks').textContent = 
+                data.agent_states?.reduce((sum, agent) => sum + agent.completed_tasks_count, 0) || 0;
+            document.getElementById('active-agents').textContent = data.performance_metrics?.active_agents || 0;
+            document.getElementById('tools-executed').textContent = 
+                data.agent_states?.reduce((sum, agent) => sum + agent.tools_available, 0) || 0;
+        }
+
+        function updateLiveLogs(logs) {
+            const logsContainer = document.getElementById('live-logs');
+            
+            // Only show recent logs
+            const recentLogs = logs.slice(-20);
+            
+            logsContainer.innerHTML = recentLogs.map(log => {
+                const time = new Date(log.timestamp).toLocaleTimeString();
+                const levelColor = {
+                    'info': 'text-blue-400',
+                    'success': 'text-green-400',
+                    'warning': 'text-yellow-400',
+                    'error': 'text-red-400'
+                }[log.level] || 'text-gray-400';
+                
+                return `<div class="${levelColor}">[${time}] ${log.message}</div>`;
+            }).join('');
+            
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        async function stopChain() {
+            if (!currentChainId) return;
+            
+            if (!confirm('Are you sure you want to stop the attack chain?')) return;
+            
+            try {
+                await fetch(`/api/attack-chain/${currentChainId}/stop`, {
+                    method: 'POST'
+                });
+                
+                clearInterval(updateInterval);
+                document.getElementById('stop-chain-btn').classList.add('hidden');
+                
             } catch (error) {
-                addLog('error', `Error stopping attack chain: ${error.message}`);
+                console.error('Error stopping chain:', error);
+                alert('Failed to stop attack chain');
             }
         }
 
+        // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            addLog('info', '🚀 Attack Chain Orchestrator ready');
-            addLog('debug', 'Enter target and objective to begin');
+            // Auto-resize visualization on window resize
+            window.addEventListener('resize', function() {
+                if (svg) {
+                    setTimeout(initVisualization, 100);
+                }
+            });
         });
     </script>
+
+    <style>
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .node-ring {
+            animation: none;
+        }
+        
+        .node-ring[data-status="running"] {
+            animation: spin 3s linear infinite;
+        }
+    </style>
 </body>
 </html>
