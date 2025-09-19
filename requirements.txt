@@ -1,15 +1,55 @@
-Flask>=3.0.0
-requests>=2.31.0
-python-nmap>=0.7.1
-rich>=13.0.0
-crewai>=0.28.0
-openai>=1.0.0
-anthropic>=0.34.0
-reportlab>=4.2.0
-jinja2>=3.1.4
-itsdangerous>=2.2.0
-Werkzeug>=3.0.0
-markdown>=3.5.0
-weasyprint>=60.0
-beautifulsoup4>=4.12.0
-pydantic>=2.5.0
+# BreachPilot Requirements
+# Core web framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+
+# AI Integration
+anthropic==0.25.0
+openai==1.12.0
+
+# HTTP requests and parsing
+requests==2.31.0
+beautifulsoup4==4.12.2
+
+# Data processing
+pandas==2.1.4
+numpy==1.24.3
+
+# Document generation
+reportlab==4.0.4
+markdown==3.5.1
+jinja2==3.1.2
+
+# Database
+sqlite3  # Built into Python
+
+# Networking and security tools (Python libraries)
+python-nmap==0.7.1
+dnspython==2.4.2
+
+# Async support
+asyncio  # Built into Python
+aiohttp==3.9.1
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Logging and monitoring
+loguru==0.7.2
+
+# Environment management
+python-dotenv==1.0.0
+
+# Data validation
+pydantic==2.5.2
+
+# Task queue (optional for production)
+celery==5.3.4
+redis==5.0.1
+
+# WSGI server for production
+gunicorn==21.2.0
+
+# Security
+cryptography==41.0.7
