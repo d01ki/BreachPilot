@@ -3,10 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BreachPilot - Automated Penetration Testing</title>
+    <title>BreachPilot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
     <div id="app" class="container mx-auto px-4 py-8">
@@ -18,63 +27,43 @@
         <div v-if="!sessionId" class="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 class="text-2xl font-semibold mb-4">Start New Scan</h2>
             <div class="flex gap-4">
-                <input 
-                    v-model="targetIp" 
-                    type="text" 
-                    placeholder="Enter target IP (e.g., 192.168.1.100)"
-                    class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    @keyup.enter="startScan"
-                >
-                <button 
-                    @click="startScan"
-                    :disabled="!targetIp || loading"
-                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                    {{ loading ? 'Starting...' : 'Start Scan' }}
-                </button>
+                <input v-model="targetIp" type="text" placeholder="Target IP" class="flex-1 px-4 py-2 border rounded" @keyup.enter="startScan">
+                <button @click="startScan" :disabled="!targetIp || loading" class="px-6 py-2 bg-blue-600 text-white rounded disabled:opacity-50">Start</button>
             </div>
         </div>
 
         <div v-if="sessionId">
             <div class="bg-white rounded-t-lg shadow-md">
                 <div class="flex border-b">
-                    <button 
-                        @click="activeTab = 'progress'"
-                        :class="activeTab === 'progress' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
-                        class="px-6 py-3 font-semibold"
-                    >Progress</button>
-                    <button 
-                        @click="activeTab = 'results'"
-                        :class="activeTab === 'results' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
-                        class="px-6 py-3 font-semibold"
-                    >Results</button>
+                    <button @click="activeTab = 'progress'" :class="activeTab === 'progress' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'" class="px-6 py-3 font-semibold">Progress</button>
+                    <button @click="activeTab = 'results'" :class="activeTab === 'results' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'" class="px-6 py-3 font-semibold">Results</button>
                 </div>
             </div>
 
             <div v-show="activeTab === 'progress'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
-                <h2 class="text-2xl font-semibold mb-4">Scan Progress</h2>
+                <h2 class="text-2xl font-semibold mb-4">Progress</h2>
                 <div class="space-y-4">
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('osint')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
-                            <span v-if="currentStep === 'osint' && loading">⏳</span>
+                            <span v-if="currentStep === 'osint' && loading" class="animate-pulse-slow">⏳</span>
                             <span v-else-if="osintComplete">✓</span>
                             <span v-else>1</span>
                         </div>
-                        <div class="flex-1"><h3 class="font-semibold">OSINT Collection</h3></div>
+                        <div class="flex-1"><h3 class="font-semibold">OSINT</h3></div>
                         <button v-if="!osintComplete" @click="runStep('osint')" :disabled="loading" class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50">Run</button>
                     </div>
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('nmap')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
-                            <span v-if="currentStep === 'nmap' && loading">⏳</span>
+                            <span v-if="currentStep === 'nmap' && loading" class="animate-pulse-slow">⏳</span>
                             <span v-else-if="nmapComplete">✓</span>
                             <span v-else>2</span>
                         </div>
-                        <div class="flex-1"><h3 class="font-semibold">Network Scan</h3></div>
+                        <div class="flex-1"><h3 class="font-semibold">Nmap</h3></div>
                         <button v-if="osintComplete && !nmapComplete" @click="runStep('nmap')" :disabled="loading" class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50">Run</button>
                     </div>
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('analysis')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
-                            <span v-if="currentStep === 'analysis' && loading">⏳</span>
+                            <span v-if="currentStep === 'analysis' && loading" class="animate-pulse-slow">⏳</span>
                             <span v-else-if="analysisComplete">✓</span>
                             <span v-else>3</span>
                         </div>
@@ -83,106 +72,98 @@
                     </div>
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('poc')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
-                            <span v-if="currentStep === 'poc_search' && loading">⏳</span>
+                            <span v-if="currentStep === 'poc_search' && loading" class="animate-pulse-slow">⏳</span>
                             <span v-else-if="pocsFound > 0">✓</span>
                             <span v-else>4</span>
                         </div>
                         <div class="flex-1"><h3 class="font-semibold">PoC Search</h3></div>
-                        <button v-if="analysisComplete && pocsFound === 0" @click="runStep('poc')" :disabled="loading" class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50">Run</button>
+                    </div>
+                    <div class="flex items-center p-3 border rounded">
+                        <div :class="getStepClass('exploit')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
+                            <span v-if="currentStep === 'exploit' && loading" class="animate-pulse-slow">⏳</span>
+                            <span v-else-if="exploitsRun > 0">✓</span>
+                            <span v-else>5</span>
+                        </div>
+                        <div class="flex-1"><h3 class="font-semibold">Exploitation</h3></div>
                     </div>
                 </div>
             </div>
 
             <div v-show="activeTab === 'results'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
-                <h2 class="text-2xl font-semibold mb-4">Scan Results</h2>
+                <h2 class="text-2xl font-semibold mb-4">Results</h2>
                 
                 <!-- DC Alert -->
                 <div v-if="nmapResult?.os_detection?.is_domain_controller" class="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4">
-                    <h3 class="text-lg font-bold text-yellow-800">⚠️ Domain Controller Detected!</h3>
-                    <p class="text-yellow-700">Domain: {{ nmapResult.os_detection.dc_info?.domain }}</p>
-                    <p class="text-yellow-700">Site: {{ nmapResult.os_detection.dc_info?.site }}</p>
+                    <h3 class="font-bold text-yellow-800">⚠️ Domain Controller Detected!</h3>
+                    <p class="text-sm">Domain: {{ nmapResult.os_detection.dc_info?.domain }}</p>
                 </div>
 
                 <!-- OSINT -->
                 <div v-if="osintResult" class="mb-6">
-                    <h3 class="text-xl font-semibold mb-3">📡 OSINT Results</h3>
-                    <div class="bg-gray-100 p-4 rounded space-y-3">
-                        <div><strong>Target IP:</strong> {{ osintResult.target_ip }}</div>
-                        <div v-if="osintResult.dns_info?.length">
-                            <strong>DNS Records:</strong>
-                            <ul class="ml-4 mt-1">
-                                <li v-for="dns in osintResult.dns_info" :key="dns" class="text-sm">• {{ dns }}</li>
-                            </ul>
+                    <h3 class="text-xl font-semibold mb-3">📡 OSINT</h3>
+                    <div class="bg-gray-100 p-4 rounded space-y-2">
+                        <div v-if="osintResult.whois_info">
+                            <p><strong>Organization:</strong> {{ osintResult.whois_info.org }}</p>
+                            <p><strong>ISP:</strong> {{ osintResult.whois_info.isp }}</p>
+                            <p><strong>Country:</strong> {{ osintResult.whois_info.country }}</p>
+                            <p><strong>City:</strong> {{ osintResult.whois_info.city }}</p>
                         </div>
-                        <div v-if="osintResult.whois_info"><strong>WHOIS:</strong> <span class="text-sm">{{ osintResult.whois_info }}</span></div>
-                        <div v-if="osintResult.shodan_data"><strong>Shodan Data:</strong> <span class="text-sm">{{ osintResult.shodan_data }}</span></div>
                     </div>
                 </div>
 
                 <!-- Nmap -->
-                <div v-if="nmapResult" class="mb-6">
-                    <h3 class="text-xl font-semibold mb-3">🔍 Network Scan</h3>
+                <div v-if="nmapResult?.open_ports?.length" class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">🔍 Nmap ({{ nmapResult.open_ports.length }} ports)</h3>
                     <div class="bg-gray-100 p-4 rounded">
-                        <div v-if="nmapResult.open_ports?.length">
-                            <h4 class="font-semibold mb-2">Open Ports ({{ nmapResult.open_ports.length }}):</h4>
-                            <table class="w-full text-sm">
-                                <thead class="bg-gray-200">
-                                    <tr><th class="p-2 text-left">Port</th><th class="p-2 text-left">Service</th><th class="p-2 text-left">Product</th></tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="port in nmapResult.open_ports" :key="port.port" class="border-t">
-                                        <td class="p-2">{{ port.port }}</td>
-                                        <td class="p-2">{{ port.service }}</td>
-                                        <td class="p-2">{{ port.product }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-200">
+                                <tr><th class="p-2 text-left">Port</th><th class="p-2 text-left">Service</th><th class="p-2 text-left">Product</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="port in nmapResult.open_ports" :key="port.port" class="border-t">
+                                    <td class="p-2">{{ port.port }}</td>
+                                    <td class="p-2">{{ port.service }}</td>
+                                    <td class="p-2">{{ port.product }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
                 <!-- CVE Analysis -->
-                <div v-if="analystResult && analystResult.identified_cves" class="mb-6">
+                <div v-if="analystResult?.identified_cves?.length" class="mb-6">
                     <h3 class="text-xl font-semibold mb-3">🔐 CVE Analysis</h3>
                     <div class="space-y-4">
                         <div v-for="cve in analystResult.identified_cves" :key="cve.cve_id" class="border rounded p-4">
-                            <div class="flex items-start justify-between mb-2">
-                                <div>
-                                    <h4 class="font-bold text-lg">{{ cve.cve_id }}</h4>
-                                    <p class="text-sm text-gray-600">{{ cve.affected_service }}</p>
-                                </div>
-                                <div>
-                                    <span :class="getCvssClass(cve.cvss_score)" class="px-3 py-1 rounded text-white font-semibold">
-                                        CVSS: {{ cve.cvss_score || 'N/A' }}
-                                    </span>
-                                </div>
+                            <div class="flex justify-between mb-2">
+                                <h4 class="font-bold">{{ cve.cve_id }}</h4>
+                                <span :class="getCvssClass(cve.cvss_score)" class="px-2 py-1 rounded text-white text-sm">
+                                    CVSS: {{ cve.cvss_score || 'N/A' }}
+                                </span>
                             </div>
-                            <p class="text-gray-700 mb-2">{{ cve.description }}</p>
-                            <div class="text-sm">
-                                <p><strong>Exploit Available:</strong> {{ cve.exploit_available ? 'Yes ⚠️' : 'No' }}</p>
-                                <p><strong>Recommendation:</strong> {{ cve.recommendation }}</p>
-                                <a :href="`https://nvd.nist.gov/vuln/detail/${cve.cve_id}`" target="_blank" class="text-blue-600 hover:underline">View on NVD →</a>
+                            <p class="text-sm text-gray-700 mb-2">{{ cve.description }}</p>
+                            <div class="text-sm bg-blue-50 p-2 rounded mb-2">
+                                <strong>📊 Rationale:</strong> {{ cve.xai_explanation }}
                             </div>
+                            <p class="text-sm"><strong>Service:</strong> {{ cve.affected_service }}</p>
+                            <p class="text-sm"><strong>Exploit:</strong> {{ cve.exploit_available ? 'Yes ⚠️' : 'No' }}</p>
+                            <a :href="`https://nvd.nist.gov/vuln/detail/${cve.cve_id}`" target="_blank" class="text-blue-600 text-sm">NVD →</a>
                         </div>
                     </div>
                 </div>
 
                 <!-- PoC Selection -->
                 <div v-if="analystResult?.identified_cves?.length && !pocSearchStarted" class="mb-6">
-                    <h3 class="text-xl font-semibold mb-3">🎯 Select CVEs for PoC Search</h3>
+                    <h3 class="text-xl font-semibold mb-3">🎯 Select CVEs for PoC</h3>
                     <div class="bg-gray-100 p-4 rounded">
                         <div v-for="cve in analystResult.identified_cves" :key="cve.cve_id" class="mb-2">
                             <label class="flex items-center">
                                 <input type="checkbox" :value="cve.cve_id" v-model="selectedCves" class="mr-2">
-                                <span>{{ cve.cve_id }} - {{ cve.description?.substring(0, 100) }}...</span>
+                                <span>{{ cve.cve_id }}</span>
                             </label>
                         </div>
-                        <button 
-                            @click="searchSelectedPocs" 
-                            :disabled="selectedCves.length === 0 || loading"
-                            class="mt-4 px-6 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
-                        >
-                            Search PoCs for {{ selectedCves.length }} CVE(s)
+                        <button @click="searchSelectedPocs" :disabled="selectedCves.length === 0 || loading" class="mt-4 px-6 py-2 bg-purple-600 text-white rounded disabled:opacity-50">
+                            Search PoCs ({{ selectedCves.length }})
                         </button>
                     </div>
                 </div>
@@ -190,24 +171,34 @@
                 <!-- PoC Results -->
                 <div v-if="pocResults?.length" class="mb-6">
                     <h3 class="text-xl font-semibold mb-3">💣 PoC Results</h3>
-                    <div class="space-y-4">
-                        <div v-for="poc in pocResults" :key="poc.cve_id" class="border rounded p-4 bg-gray-50">
-                            <h4 class="font-bold mb-2">{{ poc.cve_id }}</h4>
+                    <div class="space-y-3">
+                        <div v-for="poc in pocResults" :key="poc.cve_id" class="border rounded p-3 bg-gray-50">
+                            <h4 class="font-bold">{{ poc.cve_id }}</h4>
                             <div v-if="poc.selected_poc">
-                                <p><strong>Source:</strong> {{ poc.selected_poc.source }}</p>
-                                <p><strong>URL:</strong> <a :href="poc.selected_poc.url" target="_blank" class="text-blue-600">{{ poc.selected_poc.url }}</a></p>
-                                <p v-if="poc.selected_poc.description" class="text-sm text-gray-600">{{ poc.selected_poc.description }}</p>
+                                <p class="text-sm"><strong>Source:</strong> {{ poc.selected_poc.source }}</p>
+                                <a :href="poc.selected_poc.url" target="_blank" class="text-blue-600 text-sm">{{ poc.selected_poc.url }}</a>
                             </div>
-                            <div v-else class="text-gray-600">No PoC found</div>
+                        </div>
+                    </div>
+                    <button v-if="!exploitsRun" @click="runExploits" :disabled="loading" class="mt-4 px-6 py-2 bg-red-600 text-white rounded disabled:opacity-50">
+                        Execute Exploits
+                    </button>
+                </div>
+
+                <!-- Exploit Results -->
+                <div v-if="exploitResults?.length" class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">☠️ Exploit Results</h3>
+                    <div class="space-y-3">
+                        <div v-for="result in exploitResults" :key="result.cve_id" class="border rounded p-3" :class="result.success ? 'bg-green-50' : 'bg-red-50'">
+                            <h4 class="font-bold">{{ result.cve_id }} - {{ result.success ? '✓ Success' : '✗ Failed' }}</h4>
+                            <pre class="text-xs mt-2 bg-gray-900 text-green-400 p-2 rounded overflow-auto">{{ result.execution_output }}</pre>
                         </div>
                     </div>
                 </div>
-
-                <div v-if="!osintResult && !nmapResult" class="text-gray-600">No results yet. Run the scan steps.</div>
             </div>
 
             <div class="text-center">
-                <button @click="reset" class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700">New Scan</button>
+                <button @click="reset" class="px-6 py-2 bg-red-600 text-white rounded">New Scan</button>
             </div>
         </div>
     </div>
