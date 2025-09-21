@@ -18,6 +18,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress uvicorn access logs for polling endpoints
+logging.getLogger("uvicorn.access").addFilter(
+    lambda record: "/results" not in record.getMessage()
+)
+
 # Create FastAPI app
 app = FastAPI(title="BreachPilot API", version="2.0.0")
 
@@ -160,7 +165,7 @@ async def get_status(session_id: str) -> Dict[str, Any]:
 
 @app.get("/api/scan/{session_id}/results")
 async def get_results(session_id: str) -> Dict[str, Any]:
-    """Get all scan results"""
+    """Get all scan results (polling endpoint - no logging)"""
     try:
         session = orchestrator._get_session(session_id)
         return {
@@ -171,7 +176,6 @@ async def get_results(session_id: str) -> Dict[str, Any]:
             "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else []
         }
     except Exception as e:
-        logger.error(f"Failed to get results: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -210,7 +214,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     
     try:
         while True:
-            # Keep connection alive and send status updates
             await asyncio.sleep(2)
             
             try:
