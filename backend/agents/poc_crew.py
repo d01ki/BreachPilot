@@ -67,35 +67,74 @@ class PoCCrew:
         return list(unique_pocs.values())[:limit]
     
     def _search_github(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Search GitHub for PoCs"""
+        """Search GitHub for PoCs with improved search strategies"""
         pocs = []
         try:
-            # GitHub API search
+            # GitHub API search with multiple query strategies
             headers = {'Accept': 'application/vnd.github.v3+json'}
-            if config.GITHUB_TOKEN:
-                headers['Authorization'] = f'token {config.GITHUB_TOKEN}'
+            # GitHub Token is optional - without it, rate limits are lower but still usable
             
-            query = f'{cve_id} PoC OR exploit'
-            url = f'https://api.github.com/search/repositories?q={query}&sort=stars&order=desc'
+            # Multiple search strategies for better coverage
+            search_queries = [
+                f'{cve_id} PoC',
+                f'{cve_id} exploit',
+                f'{cve_id} vulnerability',
+                f'"{cve_id}" proof of concept',
+                f'"{cve_id}" remote code execution',
+                f'"{cve_id}" privilege escalation'
+            ]
             
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
+            for query in search_queries:
+                url = f'https://api.github.com/search/repositories?q={query}&sort=stars&order=desc&per_page=10'
                 
-                for item in data.get('items', [])[:limit]:
-                    # Try to get exploit code from repo
-                    code = self._fetch_exploit_code_from_repo(item['full_name'], cve_id)
+                response = requests.get(url, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    data = response.json()
                     
-                    poc = PoCInfo(
-                        source='GitHub',
-                        url=item['html_url'],
-                        description=item.get('description', ''),
-                        author=item['owner']['login'],
-                        stars=item.get('stargazers_count', 0),
-                        code=code
-                    )
-                    pocs.append(poc)
-                    logger.info(f"    GitHub: {item['full_name']} ({poc.stars} stars)")
+                    for item in data.get('items', []):
+                        # Skip if we already have enough results
+                        if len(pocs) >= limit:
+                            break
+                            
+                        # Try to get exploit code from repo
+                        code = self._fetch_exploit_code_from_repo(item['full_name'], cve_id)
+                        
+                        poc = PoCInfo(
+                            source='GitHub',
+                            url=item['html_url'],
+                            description=item.get('description', ''),
+                            author=item['owner']['login'],
+                            stars=item.get('stargazers_count', 0),
+                            code=code
+                        )
+                        pocs.append(poc)
+                        logger.info(f"    GitHub: {item['full_name']} ({poc.stars} stars)")
+                
+                # Also search for code directly
+                code_url = f'https://api.github.com/search/code?q={cve_id}+language:python+OR+language:bash+OR+language:ruby'
+                code_response = requests.get(code_url, headers=headers, timeout=15)
+                if code_response.status_code == 200:
+                    code_data = code_response.json()
+                    for item in code_data.get('items', [])[:3]:  # Limit code search results
+                        if len(pocs) >= limit:
+                            break
+                            
+                        repo_name = item['repository']['full_name']
+                        file_path = item['path']
+                        
+                        # Get the actual code content
+                        code = self._fetch_file_content(repo_name, file_path)
+                        
+                        poc = PoCInfo(
+                            source='GitHub Code',
+                            url=item['html_url'],
+                            description=f'Code file: {file_path}',
+                            author=item['repository']['owner']['login'],
+                            stars=item['repository'].get('stargazers_count', 0),
+                            code=code
+                        )
+                        pocs.append(poc)
+                        logger.info(f"    GitHub Code: {repo_name}/{file_path}")
         
         except Exception as e:
             logger.warning(f"GitHub search failed: {e}")
@@ -103,11 +142,11 @@ class PoCCrew:
         return pocs
     
     def _fetch_exploit_code_from_repo(self, repo_name: str, cve_id: str) -> str:
-        """Fetch exploit code from GitHub repo"""
+        """Fetch exploit code from GitHub repo with improved search"""
         try:
-            # Search for exploit files in repo
+            # Search for exploit files in repo recursively
             api_url = f'https://api.github.com/repos/{repo_name}/contents'
-            response = requests.get(api_url, timeout=10)
+            response = requests.get(api_url, timeout=15)
             
             if response.status_code == 200:
                 files = response.json()
@@ -116,61 +155,123 @@ class PoCCrew:
                 for file_info in files:
                     if isinstance(file_info, dict):
                         name = file_info.get('name', '').lower()
-                        if any(ext in name for ext in ['.py', '.sh', '.rb', '.pl', 'exploit', 'poc']):
+                        if any(ext in name for ext in ['.py', '.sh', '.rb', '.pl', 'exploit', 'poc', cve_id.lower()]):
                             # Download file content
                             download_url = file_info.get('download_url')
                             if download_url:
-                                code_response = requests.get(download_url, timeout=10)
+                                code_response = requests.get(download_url, timeout=15)
                                 if code_response.status_code == 200:
-                                    return code_response.text[:5000]  # Limit to 5000 chars
+                                    return code_response.text[:8000]  # Increased limit
+        except:
+            pass
+        
+        return ""
+    
+    def _fetch_file_content(self, repo_name: str, file_path: str) -> str:
+        """Fetch specific file content from GitHub repo"""
+        try:
+            api_url = f'https://api.github.com/repos/{repo_name}/contents/{file_path}'
+            headers = {'Accept': 'application/vnd.github.v3+json'}
+            # GitHub Token is optional - using without authentication
+            
+            response = requests.get(api_url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                file_data = response.json()
+                if file_data.get('content'):
+                    import base64
+                    content = base64.b64decode(file_data['content']).decode('utf-8')
+                    return content[:8000]  # Limit content size
         except:
             pass
         
         return ""
     
     def _search_exploitdb(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Search ExploitDB"""
+        """Search ExploitDB with improved methods"""
         pocs = []
         try:
-            # Search ExploitDB using Google (since they don't have an API)
-            search_query = f'site:exploit-db.com {cve_id}'
-            url = f'https://www.google.com/search?q={search_query}'
+            # Method 1: Direct ExploitDB search using their search API
+            search_url = f'https://www.exploit-db.com/search?cve={cve_id}'
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }
             
-            # Simple scraping (in production, use official API or database)
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(url, headers=headers, timeout=10)
-            
+            response = requests.get(search_url, headers=headers, timeout=15)
             if response.status_code == 200:
-                # Parse response for ExploitDB links
-                exploitdb_links = re.findall(r'https://www\.exploit-db\.com/exploits/(\d+)', response.text)
+                # Parse HTML for exploit IDs
+                exploit_ids = re.findall(r'/exploits/(\d+)', response.text)
                 
-                for exploit_id in exploitdb_links[:limit]:
+                for exploit_id in exploit_ids[:limit]:
                     exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
                     raw_url = f'https://www.exploit-db.com/raw/{exploit_id}'
                     
-                    # Try to fetch exploit code
-                    code = ""
-                    try:
-                        code_response = requests.get(raw_url, timeout=10)
-                        if code_response.status_code == 200:
-                            code = code_response.text[:5000]
-                    except:
-                        pass
+                    # Try to fetch exploit code and metadata
+                    code, description = self._fetch_exploitdb_details(exploit_id, raw_url)
                     
                     poc = PoCInfo(
                         source='ExploitDB',
                         url=exploit_url,
-                        description=f'ExploitDB #{exploit_id}',
+                        description=description or f'ExploitDB #{exploit_id}',
                         author='ExploitDB',
                         code=code
                     )
                     pocs.append(poc)
                     logger.info(f"    ExploitDB: {exploit_id}")
+            
+            # Method 2: Fallback to Google search if direct search fails
+            if not pocs:
+                search_query = f'site:exploit-db.com {cve_id}'
+                url = f'https://www.google.com/search?q={search_query}'
+                
+                response = requests.get(url, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    exploitdb_links = re.findall(r'https://www\.exploit-db\.com/exploits/(\d+)', response.text)
+                    
+                    for exploit_id in exploitdb_links[:limit]:
+                        exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
+                        raw_url = f'https://www.exploit-db.com/raw/{exploit_id}'
+                        
+                        code, description = self._fetch_exploitdb_details(exploit_id, raw_url)
+                        
+                        poc = PoCInfo(
+                            source='ExploitDB',
+                            url=exploit_url,
+                            description=description or f'ExploitDB #{exploit_id}',
+                            author='ExploitDB',
+                            code=code
+                        )
+                        pocs.append(poc)
+                        logger.info(f"    ExploitDB (Google): {exploit_id}")
         
         except Exception as e:
             logger.warning(f"ExploitDB search failed: {e}")
         
         return pocs
+    
+    def _fetch_exploitdb_details(self, exploit_id: str, raw_url: str) -> tuple:
+        """Fetch exploit code and description from ExploitDB"""
+        code = ""
+        description = ""
+        
+        try:
+            # Fetch raw exploit code
+            code_response = requests.get(raw_url, timeout=15)
+            if code_response.status_code == 200:
+                code = code_response.text[:8000]  # Increased limit
+            
+            # Fetch exploit page for description
+            exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
+            page_response = requests.get(exploit_url, timeout=15)
+            if page_response.status_code == 200:
+                # Extract description from HTML
+                desc_match = re.search(r'<h1[^>]*>([^<]+)</h1>', page_response.text)
+                if desc_match:
+                    description = desc_match.group(1).strip()
+        except:
+            pass
+        
+        return code, description
     
     def _search_packetstorm(self, cve_id: str, limit: int) -> List[PoCInfo]:
         """Search Packet Storm"""
