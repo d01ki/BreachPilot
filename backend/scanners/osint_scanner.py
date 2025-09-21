@@ -1,7 +1,5 @@
 import json
 import socket
-import whois
-import dns.resolver
 import requests
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -16,7 +14,6 @@ class OSINTScanner:
         self.shodan_api_key = config.SHODAN_API_KEY
     
     def scan(self, target_ip: str) -> OSINTResult:
-        """Perform OSINT scan on target IP"""
         logger.info(f"Starting OSINT scan for {target_ip}")
         
         result = OSINTResult(
@@ -28,21 +25,15 @@ class OSINTScanner:
             # Get hostname
             result.hostname = self._get_hostname(target_ip)
             
-            # Get domain from hostname
-            if result.hostname:
-                result.domain = self._extract_domain(result.hostname)
+            # Get IP geolocation and ISP info
+            result.whois_info = self._get_ip_info(target_ip)
             
-            # Get WHOIS information
-            result.whois_info = self._get_whois_info(target_ip)
-            
-            # Get subdomains (if domain is available)
-            if result.domain:
-                result.subdomains = self._get_subdomains(result.domain)
+            # Get DNS info
+            result.dns_info = self._get_dns_info(target_ip)
             
             # Get Shodan data
             result.shodan_data = self._get_shodan_data(target_ip)
             
-            # Extract public services from Shodan
             if result.shodan_data:
                 result.public_services = self._extract_services(result.shodan_data)
             
@@ -53,68 +44,62 @@ class OSINTScanner:
             logger.error(f"OSINT scan failed: {e}")
             result.status = StepStatus.FAILED
         
-        # Save result to JSON
         self._save_result(target_ip, result)
         return result
     
     def _get_hostname(self, ip: str) -> Optional[str]:
-        """Resolve hostname from IP"""
         try:
             hostname = socket.gethostbyaddr(ip)[0]
+            logger.info(f"Hostname: {hostname}")
             return hostname
         except:
             return None
     
-    def _extract_domain(self, hostname: str) -> Optional[str]:
-        """Extract domain from hostname"""
+    def _get_ip_info(self, ip: str) -> Dict[str, Any]:
+        """Get IP information using ip-api.com (free, no key needed)"""
         try:
-            parts = hostname.split('.')
-            if len(parts) >= 2:
-                return '.'.join(parts[-2:])
-        except:
-            pass
-        return None
-    
-    def _get_whois_info(self, target: str) -> Optional[Dict[str, Any]]:
-        """Get WHOIS information"""
-        try:
-            w = whois.whois(target)
-            return {
-                "domain_name": w.domain_name,
-                "registrar": w.registrar,
-                "creation_date": str(w.creation_date) if w.creation_date else None,
-                "expiration_date": str(w.expiration_date) if w.expiration_date else None,
-                "name_servers": w.name_servers,
-                "emails": w.emails,
-                "org": w.org,
-                "country": w.country
-            }
+            response = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                info = {
+                    "ip": ip,
+                    "org": data.get('org', 'Unknown'),
+                    "isp": data.get('isp', 'Unknown'),
+                    "country": data.get('country', 'Unknown'),
+                    "city": data.get('city', 'Unknown'),
+                    "region": data.get('regionName', 'Unknown'),
+                    "asn": data.get('as', 'Unknown'),
+                    "timezone": data.get('timezone', 'Unknown')
+                }
+                logger.info(f"IP Info: {info['org']} - {info['country']}")
+                return info
         except Exception as e:
-            logger.warning(f"WHOIS lookup failed: {e}")
-            return None
+            logger.warning(f"IP info lookup failed: {e}")
+        
+        return {"ip": ip, "org": "Unknown", "country": "Unknown"}
     
-    def _get_subdomains(self, domain: str) -> List[str]:
-        """Attempt to find subdomains"""
-        subdomains = []
-        common_subdomains = ['www', 'mail', 'ftp', 'admin', 'dev', 'test', 'api', 'staging']
-        
-        resolver = dns.resolver.Resolver()
-        resolver.timeout = 2
-        resolver.lifetime = 2
-        
-        for sub in common_subdomains:
+    def _get_dns_info(self, ip: str) -> List[str]:
+        """Get DNS records"""
+        dns_info = []
+        try:
+            import dns.resolver
+            resolver = dns.resolver.Resolver()
+            resolver.timeout = 2
+            
+            # Try PTR record
             try:
-                test_domain = f"{sub}.{domain}"
-                answers = resolver.resolve(test_domain, 'A')
-                if answers:
-                    subdomains.append(test_domain)
+                reversed_ip = '.'.join(reversed(ip.split('.'))) + '.in-addr.arpa'
+                answers = resolver.resolve(reversed_ip, 'PTR')
+                for rdata in answers:
+                    dns_info.append(f"PTR: {rdata}")
             except:
-                continue
+                pass
+        except ImportError:
+            logger.warning("dnspython not installed, skipping DNS lookup")
         
-        return subdomains
+        return dns_info
     
     def _get_shodan_data(self, ip: str) -> Optional[Dict[str, Any]]:
-        """Get data from Shodan"""
         if not self.shodan_api_key:
             logger.warning("Shodan API key not configured")
             return None
@@ -127,10 +112,8 @@ class OSINTScanner:
                 "ip": host.get('ip_str'),
                 "org": host.get('org'),
                 "isp": host.get('isp'),
-                "asn": host.get('asn'),
                 "ports": host.get('ports', []),
                 "hostnames": host.get('hostnames', []),
-                "domains": host.get('domains', []),
                 "data": host.get('data', [])
             }
         except Exception as e:
@@ -138,9 +121,7 @@ class OSINTScanner:
             return None
     
     def _extract_services(self, shodan_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract service information from Shodan data"""
         services = []
-        
         if 'data' in shodan_data:
             for item in shodan_data['data']:
                 service = {
@@ -148,14 +129,12 @@ class OSINTScanner:
                     "protocol": item.get('transport', 'tcp'),
                     "product": item.get('product'),
                     "version": item.get('version'),
-                    "banner": item.get('data', '')[:200]  # First 200 chars
+                    "banner": item.get('data', '')[:200]
                 }
                 services.append(service)
-        
         return services
     
     def _save_result(self, target_ip: str, result: OSINTResult):
-        """Save OSINT result to JSON file"""
         output_file = config.DATA_DIR / f"{target_ip}_osint.json"
         with open(output_file, 'w') as f:
             json.dump(result.model_dump(), f, indent=2, default=str)
