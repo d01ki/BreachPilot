@@ -1,14 +1,14 @@
 # Core dependencies
-flask==3.0.0
-python-dotenv==1.0.0
+flask
+python-dotenv
 
 # AI Agent framework
-crewai==0.28.8
-langchain-openai==0.1.0
-langchain-anthropic==0.1.0
+crewai
+langchain-openai
+langchain-anthropic
 
 # Optional: Real scanning tools (if not using mock)
-dnspython==2.4.2
-python-whois==0.8.0
-pyOpenSSL==23.3.0
-requests==2.31.0
+dnspython
+python-whois
+pyOpenSSL
+requests
