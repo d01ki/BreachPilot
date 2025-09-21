@@ -24,7 +24,7 @@ class NmapScanner:
         )
         
         try:
-            # Run nmap command directly (no root required)
+            # Run basic nmap scan
             cmd = ['nmap', '-sC', '-sV', target_ip]
             logger.info(f"Executing: {' '.join(cmd)}")
             
@@ -32,15 +32,13 @@ class NmapScanner:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=120  # 2 minutes max
             )
             
             output = process.stdout
-            logger.info("Nmap command completed")
-            logger.info(f"Output length: {len(output)} characters")
+            logger.info(f"Nmap command completed ({len(output)} characters)")
             
             if output:
-                # Parse the output
                 result.raw_output = output
                 result.open_ports = self._parse_ports(output)
                 result.services = self._parse_services(output)
@@ -50,11 +48,15 @@ class NmapScanner:
                 for port in result.open_ports:
                     logger.info(f"  Port {port['port']}: {port['service']} - {port['product']}")
                 
-                # Run vulnerability scan
-                logger.info("Running vulnerability scan...")
-                vuln_output = self._run_vuln_scan(target_ip)
-                result.vulnerabilities = self._parse_vulnerabilities(vuln_output)
-                logger.info(f"Found {len(result.vulnerabilities)} vulnerabilities")
+                # Run vulnerability scan with shorter timeout
+                logger.info("Running vulnerability scan (60s timeout)...")
+                try:
+                    vuln_output = self._run_vuln_scan(target_ip)
+                    result.vulnerabilities = self._parse_vulnerabilities(vuln_output)
+                    logger.info(f"Found {len(result.vulnerabilities)} vulnerabilities")
+                except subprocess.TimeoutExpired:
+                    logger.warning("Vulnerability scan timed out, continuing without vuln results")
+                    result.vulnerabilities = []
                 
                 result.status = StepStatus.COMPLETED
                 logger.info("Scan completed successfully")
@@ -69,7 +71,7 @@ class NmapScanner:
             logger.error(f"Nmap scan failed: {e}", exc_info=True)
             result.status = StepStatus.FAILED
         
-        # Save result to JSON
+        # Save result immediately
         self._save_result(target_ip, result)
         logger.info(f"="*50)
         
@@ -81,26 +83,25 @@ class NmapScanner:
         lines = output.split('\n')
         
         for line in lines:
-            # Match lines like: 22/tcp   open  ssh     OpenSSH 8.2p1
-            match = re.match(r'(\d+)/tcp\s+(open|filtered|closed)\s+(\S+)\s*(.*)', line)
+            # Match: 22/tcp   open  ssh     OpenSSH 8.2p1
+            match = re.match(r'(\d+)/tcp\s+open\s+(\S+)\s*(.*)', line)
             if match:
                 port_num = match.group(1)
-                state = match.group(2)
-                service = match.group(3)
-                details = match.group(4).strip()
+                service = match.group(2)
+                details = match.group(3).strip()
                 
-                if state == 'open':
-                    ports.append({
-                        'port': int(port_num),
-                        'state': state,
-                        'service': service,
-                        'product': details
-                    })
+                ports.append({
+                    'port': int(port_num),
+                    'state': 'open',
+                    'service': service,
+                    'product': details if details else service,
+                    'version': ''
+                })
         
         return ports
     
     def _parse_services(self, output: str) -> List[Dict[str, Any]]:
-        """Parse service information from nmap output"""
+        """Parse service information"""
         services = []
         lines = output.split('\n')
         
@@ -111,7 +112,6 @@ class NmapScanner:
                 service_name = match.group(2)
                 details = match.group(3).strip()
                 
-                # Extract product and version
                 product = ''
                 version = ''
                 if details:
@@ -134,11 +134,11 @@ class NmapScanner:
         return services
     
     def _parse_os(self, output: str) -> Dict[str, Any]:
-        """Parse OS detection from nmap output"""
-        os_info = {}
+        """Parse OS detection"""
+        os_info = None
         lines = output.split('\n')
         
-        for i, line in enumerate(lines):
+        for line in lines:
             if 'OS details:' in line or 'Running:' in line:
                 os_info = {
                     'name': line.split(':', 1)[1].strip() if ':' in line else '',
@@ -148,28 +148,24 @@ class NmapScanner:
                 }
                 break
         
-        return os_info if os_info else None
+        return os_info
     
     def _run_vuln_scan(self, target_ip: str) -> str:
-        """Run vulnerability scan"""
-        try:
-            cmd = ['nmap', '-sV', '--script', 'vuln', target_ip]
-            logger.info(f"Running vulnerability scan: {' '.join(cmd)}")
-            
-            process = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            
-            return process.stdout
-        except Exception as e:
-            logger.error(f"Vulnerability scan failed: {e}")
-            return ''
+        """Run vulnerability scan with timeout"""
+        cmd = ['nmap', '-sV', '--script', 'vuln', target_ip]
+        logger.info(f"Running: {' '.join(cmd)}")
+        
+        process = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60  # 60 seconds max for vuln scan
+        )
+        
+        return process.stdout
     
     def _parse_vulnerabilities(self, output: str) -> List[Dict[str, Any]]:
-        """Parse vulnerabilities from nmap vuln script output"""
+        """Parse vulnerabilities"""
         vulnerabilities = []
         
         # Find CVEs
@@ -179,7 +175,7 @@ class NmapScanner:
         for cve in set(cves):
             vulnerabilities.append({
                 'cve_id': cve,
-                'context': self._extract_cve_context(output, cve),
+                'context': '',
                 'severity': 'unknown'
             })
             logger.info(f"  Found CVE: {cve}")
@@ -197,16 +193,6 @@ class NmapScanner:
             logger.info(f"  Found vulnerability: {vuln}")
         
         return vulnerabilities
-    
-    def _extract_cve_context(self, output: str, cve: str) -> str:
-        """Extract context around CVE"""
-        lines = output.split('\n')
-        for i, line in enumerate(lines):
-            if cve in line:
-                start = max(0, i - 2)
-                end = min(len(lines), i + 3)
-                return ' '.join(lines[start:end])
-        return ''
     
     def _save_result(self, target_ip: str, result: NmapResult):
         """Save result to JSON file"""
