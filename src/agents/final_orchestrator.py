@@ -1,5 +1,5 @@
 """
-Final orchestrator: Mock port scan + Real OpenAI agents with JSON communication
+Final orchestrator: Mock port scan + Simple pattern-based CVE analysis
 """
 import asyncio
 import json
@@ -16,20 +16,15 @@ from .shared_knowledge import SharedKnowledgeBase
 # Mock port scan
 from ..tools.port_scan_mock import run_mock_port_scan
 
-# Real OpenAI agents
-try:
-    from .openai_security_agents import get_ai_security_agents
-    AI_AVAILABLE = True
-except ImportError:
-    AI_AVAILABLE = False
-    logging.warning("⚠️ OpenAI agents not available")
+# Simple analyzer
+from .simple_vuln_analyzer import get_simple_analyzer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class FinalOrchestrator:
-    """Mock scan + Real OpenAI AI analysis"""
+    """Mock scan + Simple CVE analysis"""
     
     def __init__(self):
         self.knowledge_base = SharedKnowledgeBase()
@@ -37,7 +32,7 @@ class FinalOrchestrator:
         self.execution_logs: Dict[str, List[Dict[str, Any]]] = {}
         self.scan_results: Dict[str, Dict[str, Any]] = {}
         
-        logger.info("🎯 FinalOrchestrator: Mock port scan + Real OpenAI agents")
+        logger.info("🎯 FinalOrchestrator: Mock port scan + Simple CVE analysis")
     
     def create_attack_chain(self, target: str, objective: str) -> AttackChain:
         """Create attack chain"""
@@ -57,28 +52,18 @@ class FinalOrchestrator:
                 metadata={"target": target, "tool": "port_scan"}
             ),
             AttackTask(
-                name="AI CVE Analysis (Real)",
+                name="CVE Analysis",
                 stage=AttackStage.VULNERABILITY_ANALYSIS,
                 agent_role=AgentRole.VULNERABILITY_ANALYST,
                 dependencies=[],
                 priority=9,
                 estimated_duration=15,
-                metadata={"target": target, "tool": "ai_cve_analysis"}
-            ),
-            AttackTask(
-                name="PoC Hunter (Real)",
-                stage=AttackStage.WEAPONIZATION,
-                agent_role=AgentRole.EXPLOIT_ENGINEER,
-                dependencies=[],
-                priority=8,
-                estimated_duration=10,
-                metadata={"target": target, "tool": "poc_hunter"}
+                metadata={"target": target, "tool": "cve_analysis"}
             )
         ]
         
         # Set dependencies
         chain.tasks[1].dependencies = [chain.tasks[0].id]
-        chain.tasks[2].dependencies = [chain.tasks[1].id]
         
         chain.agent_states = self._initialize_agents()
         
@@ -96,12 +81,12 @@ class FinalOrchestrator:
     def _initialize_agents(self) -> Dict[str, AgentState]:
         """Initialize agents"""
         agents = {}
-        for role in [AgentRole.RECON_SPECIALIST, AgentRole.VULNERABILITY_ANALYST, AgentRole.EXPLOIT_ENGINEER]:
+        for role in [AgentRole.RECON_SPECIALIST, AgentRole.VULNERABILITY_ANALYST]:
             agent_id = f"agent_{role.value}_{uuid.uuid4().hex[:8]}"
             agents[agent_id] = AgentState(
                 id=agent_id,
                 role=role,
-                capabilities=["port_scan", "cve_analysis", "poc_hunting"]
+                capabilities=["port_scan", "cve_analysis"]
             )
         return agents
     
@@ -151,7 +136,7 @@ class FinalOrchestrator:
                 if tool == "port_scan":
                     self.scan_results[chain_id]["scan"] = result
                     self._save_results(chain_id, "scan", result)
-                elif tool == "ai_cve_analysis" or tool == "poc_hunter":
+                elif tool == "cve_analysis":
                     self.scan_results[chain_id]["vulnerabilities"] = result
                     self._save_results(chain_id, "vulnerabilities", result)
                 
@@ -180,38 +165,26 @@ class FinalOrchestrator:
                 self._log(chain.id, "info", f"Found {len(result.get('ports', []))} open ports")
                 return result
             
-            elif tool == "ai_cve_analysis":
-                self._log(chain.id, "info", "🤖 Starting Real AI CVE analysis (OpenAI)")
+            elif tool == "cve_analysis":
+                self._log(chain.id, "info", "🔍 Starting CVE analysis")
                 
                 scan_data = self.scan_results.get(chain.id, {}).get("scan", {})
                 
-                if AI_AVAILABLE:
-                    agents = get_ai_security_agents()
-                    result = await agents.analyze_vulnerabilities(scan_data, chain.id)
-                    vulns = len(result.get("vulnerabilities", []))
-                    method = result.get("analysis_method", "AI")
-                    self._log(chain.id, "success", f"AI found {vulns} CVEs ({method})")
-                else:
-                    # Simple fallback
-                    result = {
-                        "vulnerabilities": [],
-                        "analysis_method": "No API key",
-                        "xai_explanations": {}
-                    }
-                    self._log(chain.id, "warning", "OpenAI API key not set")
+                # Use simple analyzer
+                analyzer = get_simple_analyzer()
+                result = await analyzer.analyze(scan_data)
+                
+                vulns = len(result.get("vulnerabilities", []))
+                self._log(chain.id, "success", f"Found {vulns} CVEs")
                 
                 return result
-            
-            elif tool == "poc_hunter":
-                self._log(chain.id, "info", "Already included in CVE analysis")
-                return self.scan_results.get(chain.id, {}).get("vulnerabilities", {})
             
             else:
                 return {"error": f"Unknown tool: {tool}"}
                 
         except Exception as e:
             self._log(chain.id, "error", f"Task failed: {str(e)}")
-            return {"error": str(e)}
+            raise
     
     def _are_dependencies_met(self, task: AttackTask, chain: AttackChain) -> bool:
         """Check dependencies"""
