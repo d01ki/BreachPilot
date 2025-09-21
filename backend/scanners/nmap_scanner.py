@@ -24,7 +24,7 @@ class NmapScanner:
         )
         
         try:
-            # Fast scan: -T4 (aggressive timing), -F (fast mode - top 100 ports)
+            # Fast scan
             cmd = ['nmap', '-T4', '-F', '-sV', target_ip]
             logger.info(f"Executing: {' '.join(cmd)}")
             
@@ -36,7 +36,7 @@ class NmapScanner:
             )
             
             output = process.stdout
-            logger.info(f"Fast scan completed ({len(output)} characters)")
+            logger.info(f"Scan completed ({len(output)} chars)")
             
             if output:
                 result.raw_output = output
@@ -44,23 +44,24 @@ class NmapScanner:
                 result.services = self._parse_services(output)
                 result.os_detection = self._parse_os(output)
                 
+                # Detect if target is a Domain Controller
+                is_dc = self._is_domain_controller(result.services, output)
+                if is_dc:
+                    logger.info("⚠️  DOMAIN CONTROLLER DETECTED!")
+                    if result.os_detection is None:
+                        result.os_detection = {}
+                    result.os_detection['is_domain_controller'] = True
+                    result.os_detection['dc_info'] = self._extract_dc_info(output)
+                
                 logger.info(f"Found {len(result.open_ports)} open ports")
                 for port in result.open_ports:
                     logger.info(f"  Port {port['port']}: {port['service']} - {port['product']}")
                 
-                # Quick vulnerability check
-                if result.open_ports:
-                    logger.info("Running quick vulnerability check (30s timeout)...")
-                    try:
-                        vuln_output = self._run_quick_vuln_scan(target_ip, result.open_ports)
-                        result.vulnerabilities = self._parse_vulnerabilities(vuln_output)
-                        logger.info(f"Found {len(result.vulnerabilities)} potential vulnerabilities")
-                    except (subprocess.TimeoutExpired, Exception) as e:
-                        logger.warning(f"Vulnerability scan skipped: {e}")
-                        result.vulnerabilities = []
+                # Skip vuln scan for now to speed up
+                result.vulnerabilities = []
                 
                 result.status = StepStatus.COMPLETED
-                logger.info("Fast scan completed successfully")
+                logger.info("Scan completed successfully")
             else:
                 logger.warning("No output from nmap")
                 result.status = StepStatus.FAILED
@@ -72,11 +73,49 @@ class NmapScanner:
             logger.error(f"Nmap scan failed: {e}", exc_info=True)
             result.status = StepStatus.FAILED
         
-        # Save result
         self._save_result(target_ip, result)
         logger.info("="*50)
         
         return result
+    
+    def _is_domain_controller(self, services: List[Dict], output: str) -> bool:
+        """Detect if target is a Windows Domain Controller"""
+        dc_ports = {389, 636, 3268, 3269, 88}  # LDAP, LDAPS, Global Catalog, Kerberos
+        open_dc_ports = sum(1 for s in services if s['port'] in dc_ports)
+        
+        # If 3+ DC ports are open, likely a DC
+        if open_dc_ports >= 3:
+            return True
+        
+        # Check for Active Directory keywords
+        dc_keywords = ['Active Directory', 'Domain Controller', 'AD', 'LDAP']
+        return any(kw in output for kw in dc_keywords)
+    
+    def _extract_dc_info(self, output: str) -> Dict[str, Any]:
+        """Extract Domain Controller information"""
+        dc_info = {
+            'domain': 'Unknown',
+            'site': 'Unknown',
+            'services': []
+        }
+        
+        # Extract domain name
+        domain_match = re.search(r'Domain: ([^,\)]+)', output)
+        if domain_match:
+            dc_info['domain'] = domain_match.group(1).strip()
+        
+        # Extract site name
+        site_match = re.search(r'Site: ([^,\)]+)', output)
+        if site_match:
+            dc_info['site'] = site_match.group(1).strip()
+        
+        # List DC services
+        dc_services = ['LDAP', 'Kerberos', 'DNS', 'SMB']
+        for service in dc_services:
+            if service.lower() in output.lower():
+                dc_info['services'].append(service)
+        
+        return dc_info
     
     def _parse_ports(self, output: str) -> List[Dict[str, Any]]:
         ports = []
@@ -148,49 +187,8 @@ class NmapScanner:
         
         return os_info
     
-    def _run_quick_vuln_scan(self, target_ip: str, open_ports: List[Dict]) -> str:
-        port_list = ','.join([str(p['port']) for p in open_ports[:5]])
-        cmd = ['nmap', '-T4', '-p', port_list, '--script', 'vuln', '--script-timeout', '10s', target_ip]
-        logger.info(f"Quick vuln scan: {' '.join(cmd)}")
-        
-        process = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        return process.stdout
-    
-    def _parse_vulnerabilities(self, output: str) -> List[Dict[str, Any]]:
-        vulnerabilities = []
-        
-        cve_pattern = r'(CVE-\d{4}-\d{4,7})'
-        cves = re.findall(cve_pattern, output)
-        
-        for cve in set(cves):
-            vulnerabilities.append({
-                'cve_id': cve,
-                'context': '',
-                'severity': 'unknown'
-            })
-            logger.info(f"  Found CVE: {cve}")
-        
-        vuln_pattern = r'\|\s+(.+?):\s+VULNERABLE'
-        vuln_matches = re.findall(vuln_pattern, output)
-        
-        for vuln in vuln_matches:
-            vulnerabilities.append({
-                'description': vuln.strip(),
-                'type': 'script_detection',
-                'severity': 'unknown'
-            })
-            logger.info(f"  Found vulnerability: {vuln}")
-        
-        return vulnerabilities
-    
     def _save_result(self, target_ip: str, result: NmapResult):
         output_file = config.DATA_DIR / f"{target_ip}_nmap.json"
         with open(output_file, 'w') as f:
             json.dump(result.model_dump(), f, indent=2, default=str)
-        logger.info(f"Nmap result saved to {output_file}")
+        logger.info(f"Result saved to {output_file}")
