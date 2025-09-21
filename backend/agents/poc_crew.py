@@ -1,9 +1,10 @@
 import json
+import re
 import requests
 from typing import List, Dict, Any
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import ChatOpenAI
-from backend.models import PoCResult, CVEAnalysis, StepStatus
+from backend.models import PoCResult, PoCInfo, StepStatus
 from backend.config import config
 import logging
 
@@ -13,181 +14,188 @@ class PoCCrew:
     def __init__(self):
         self.llm = ChatOpenAI(
             model=config.LLM_MODEL,
-            temperature=config.LLM_TEMPERATURE,
+            temperature=0.3,
             api_key=config.OPENAI_API_KEY
         )
     
-    def search_poc(self, cve_analysis: CVEAnalysis) -> PoCResult:
-        """Search for PoC exploits"""
-        logger.info(f"Searching PoC for {cve_analysis.cve_id}")
-        
-        result = PoCResult(
-            cve_id=cve_analysis.cve_id,
-            status=StepStatus.RUNNING
-        )
-        
-        try:
-            # Search multiple sources
-            sources = self._search_exploit_sources(cve_analysis.cve_id)
-            result.poc_sources = sources
-            
-            if sources:
-                # Use agent to select best PoC
-                result.selected_poc = self._select_best_poc(cve_analysis, sources)
-                result.status = StepStatus.COMPLETED
-            else:
-                logger.warning(f"No PoC found for {cve_analysis.cve_id}")
-                result.status = StepStatus.FAILED
-            
-        except Exception as e:
-            logger.error(f"PoC search failed: {e}")
-            result.status = StepStatus.FAILED
-        
-        # Save result
-        self._save_result(cve_analysis.cve_id, result)
-        return result
-    
-    def _search_exploit_sources(self, cve_id: str) -> List[Dict[str, str]]:
-        """Search various exploit databases"""
-        sources = []
-        
-        # Search Exploit-DB
-        exploitdb_results = self._search_exploitdb(cve_id)
-        sources.extend(exploitdb_results)
-        
-        # Search GitHub
-        github_results = self._search_github(cve_id)
-        sources.extend(github_results)
-        
-        # Search Metasploit modules
-        msf_results = self._search_metasploit(cve_id)
-        sources.extend(msf_results)
-        
-        return sources
-    
-    def _search_exploitdb(self, cve_id: str) -> List[Dict[str, str]]:
-        """Search Exploit-DB"""
+    def search_pocs(self, selected_cves: List[str], limit: int = 3) -> List[PoCResult]:
+        """Search for PoC exploits for selected CVEs"""
+        logger.info(f"Searching PoCs for: {selected_cves}")
         results = []
-        try:
-            url = f"https://www.exploit-db.com/search?cve={cve_id}"
-            # Note: In production, use proper API or scraping
-            # This is a placeholder
-            results.append({
-                "source": "Exploit-DB",
-                "url": url,
-                "type": "web"
-            })
-        except Exception as e:
-            logger.warning(f"Exploit-DB search failed: {e}")
+        
+        for cve_id in selected_cves:
+            logger.info(f"Searching PoCs for {cve_id}...")
+            pocs = self._search_single_cve(cve_id, limit)
+            
+            result = PoCResult(
+                cve_id=cve_id,
+                status=StepStatus.COMPLETED if pocs else StepStatus.FAILED,
+                available_pocs=pocs
+            )
+            
+            if pocs:
+                logger.info(f"  Found {len(pocs)} PoCs for {cve_id}")
+            else:
+                logger.warning(f"  No PoCs found for {cve_id}")
+            
+            results.append(result)
         
         return results
     
-    def _search_github(self, cve_id: str) -> List[Dict[str, str]]:
+    def _search_single_cve(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search for PoCs from multiple sources"""
+        pocs = []
+        
+        # Search GitHub
+        github_pocs = self._search_github(cve_id, limit)
+        pocs.extend(github_pocs)
+        
+        # Search ExploitDB
+        exploitdb_pocs = self._search_exploitdb(cve_id, limit)
+        pocs.extend(exploitdb_pocs)
+        
+        # Search Packet Storm
+        packetstorm_pocs = self._search_packetstorm(cve_id, limit)
+        pocs.extend(packetstorm_pocs)
+        
+        # Deduplicate and limit
+        unique_pocs = {}
+        for poc in pocs:
+            if poc.url not in unique_pocs:
+                unique_pocs[poc.url] = poc
+        
+        return list(unique_pocs.values())[:limit]
+    
+    def _search_github(self, cve_id: str, limit: int) -> List[PoCInfo]:
         """Search GitHub for PoCs"""
-        results = []
+        pocs = []
         try:
-            # GitHub search API
-            headers = {"Accept": "application/vnd.github.v3+json"}
-            url = f"https://api.github.com/search/repositories?q={cve_id}+PoC"
+            # GitHub API search
+            headers = {'Accept': 'application/vnd.github.v3+json'}
+            if config.GITHUB_TOKEN:
+                headers['Authorization'] = f'token {config.GITHUB_TOKEN}'
+            
+            query = f'{cve_id} PoC OR exploit'
+            url = f'https://api.github.com/search/repositories?q={query}&sort=stars&order=desc'
             
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                for item in data.get('items', [])[:5]:  # Top 5 results
-                    results.append({
-                        "source": "GitHub",
-                        "name": item.get('name'),
-                        "url": item.get('html_url'),
-                        "description": item.get('description', ''),
-                        "stars": item.get('stargazers_count', 0),
-                        "type": "github"
-                    })
+                
+                for item in data.get('items', [])[:limit]:
+                    # Try to get exploit code from repo
+                    code = self._fetch_exploit_code_from_repo(item['full_name'], cve_id)
+                    
+                    poc = PoCInfo(
+                        source='GitHub',
+                        url=item['html_url'],
+                        description=item.get('description', ''),
+                        author=item['owner']['login'],
+                        stars=item.get('stargazers_count', 0),
+                        code=code
+                    )
+                    pocs.append(poc)
+                    logger.info(f"    GitHub: {item['full_name']} ({poc.stars} stars)")
+        
         except Exception as e:
             logger.warning(f"GitHub search failed: {e}")
         
-        return results
+        return pocs
     
-    def _search_metasploit(self, cve_id: str) -> List[Dict[str, str]]:
-        """Search for Metasploit modules"""
-        results = []
+    def _fetch_exploit_code_from_repo(self, repo_name: str, cve_id: str) -> str:
+        """Fetch exploit code from GitHub repo"""
         try:
-            # Search local Metasploit database
-            import subprocess
-            cmd = f"msfconsole -q -x 'search {cve_id}; exit'"
+            # Search for exploit files in repo
+            api_url = f'https://api.github.com/repos/{repo_name}/contents'
+            response = requests.get(api_url, timeout=10)
             
-            # Note: This requires Metasploit to be installed
-            # In production, use proper Metasploit API
-            results.append({
-                "source": "Metasploit",
-                "cve": cve_id,
-                "type": "metasploit"
-            })
-        except Exception as e:
-            logger.warning(f"Metasploit search failed: {e}")
+            if response.status_code == 200:
+                files = response.json()
+                
+                # Look for exploit files (.py, .sh, .rb, etc.)
+                for file_info in files:
+                    if isinstance(file_info, dict):
+                        name = file_info.get('name', '').lower()
+                        if any(ext in name for ext in ['.py', '.sh', '.rb', '.pl', 'exploit', 'poc']):
+                            # Download file content
+                            download_url = file_info.get('download_url')
+                            if download_url:
+                                code_response = requests.get(download_url, timeout=10)
+                                if code_response.status_code == 200:
+                                    return code_response.text[:5000]  # Limit to 5000 chars
+        except:
+            pass
         
-        return results
+        return ""
     
-    def _select_best_poc(self, cve_analysis: CVEAnalysis, sources: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Use agent to select best PoC"""
+    def _search_exploitdb(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search ExploitDB"""
+        pocs = []
         try:
-            # Create PoC selector agent
-            poc_selector = Agent(
-                role='Exploit Verification Specialist',
-                goal='Select the most reliable and effective PoC exploit',
-                backstory="""You are an expert in evaluating exploit code quality and reliability. 
-                You analyze available PoCs and select the best option based on code quality, 
-                reliability, and ease of use.""",
-                llm=self.llm,
-                verbose=True
-            )
+            # Search ExploitDB using Google (since they don't have an API)
+            search_query = f'site:exploit-db.com {cve_id}'
+            url = f'https://www.google.com/search?q={search_query}'
             
-            # Create selection task
-            sources_text = json.dumps(sources, indent=2)
+            # Simple scraping (in production, use official API or database)
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=10)
             
-            select_task = Task(
-                description=f"""Analyze the following PoC sources for {cve_analysis.cve_id}:
+            if response.status_code == 200:
+                # Parse response for ExploitDB links
+                exploitdb_links = re.findall(r'https://www\.exploit-db\.com/exploits/(\d+)', response.text)
                 
-                {sources_text}
-                
-                Select the best PoC based on:
-                1. Source reliability (prefer official repos, high GitHub stars)
-                2. Code quality indicators
-                3. Recent updates
-                4. Clear documentation
-                
-                CVE Context: {cve_analysis.description}
-                Affected Service: {cve_analysis.affected_service}
-                
-                Recommend the best option and explain why.""",
-                agent=poc_selector,
-                expected_output="The selected PoC with justification"
-            )
-            
-            crew = Crew(
-                agents=[poc_selector],
-                tasks=[select_task],
-                process=Process.sequential,
-                verbose=True
-            )
-            
-            result = crew.kickoff()
-            
-            # Parse result and return selected PoC
-            # In production, parse the agent's response properly
-            # For now, return highest priority source
-            if sources:
-                return sources[0]
-            
-        except Exception as e:
-            logger.error(f"PoC selection failed: {e}")
-            if sources:
-                return sources[0]
+                for exploit_id in exploitdb_links[:limit]:
+                    exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
+                    raw_url = f'https://www.exploit-db.com/raw/{exploit_id}'
+                    
+                    # Try to fetch exploit code
+                    code = ""
+                    try:
+                        code_response = requests.get(raw_url, timeout=10)
+                        if code_response.status_code == 200:
+                            code = code_response.text[:5000]
+                    except:
+                        pass
+                    
+                    poc = PoCInfo(
+                        source='ExploitDB',
+                        url=exploit_url,
+                        description=f'ExploitDB #{exploit_id}',
+                        author='ExploitDB',
+                        code=code
+                    )
+                    pocs.append(poc)
+                    logger.info(f"    ExploitDB: {exploit_id}")
         
-        return None
+        except Exception as e:
+            logger.warning(f"ExploitDB search failed: {e}")
+        
+        return pocs
     
-    def _save_result(self, cve_id: str, result: PoCResult):
-        """Save PoC result to JSON"""
-        output_file = config.DATA_DIR / f"{cve_id}_poc.json"
-        with open(output_file, 'w') as f:
-            json.dump(result.model_dump(), f, indent=2, default=str)
-        logger.info(f"PoC result saved to {output_file}")
+    def _search_packetstorm(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search Packet Storm"""
+        pocs = []
+        try:
+            url = f'https://packetstormsecurity.com/search/?q={cve_id}'
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                # Parse for exploit links
+                links = re.findall(r'href="(/files/[^"]+)"', response.text)
+                
+                for link in links[:limit]:
+                    full_url = f'https://packetstormsecurity.com{link}'
+                    poc = PoCInfo(
+                        source='PacketStorm',
+                        url=full_url,
+                        description='PacketStorm Security',
+                        author='PacketStorm'
+                    )
+                    pocs.append(poc)
+                    logger.info(f"    PacketStorm: {link}")
+        
+        except Exception as e:
+            logger.warning(f"PacketStorm search failed: {e}")
+        
+        return pocs
