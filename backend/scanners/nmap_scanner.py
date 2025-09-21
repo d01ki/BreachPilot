@@ -15,8 +15,8 @@ class NmapScanner:
     
     def scan(self, target_ip: str) -> NmapResult:
         logger.info(f"="*50)
-        logger.info(f"Starting Nmap scan for {target_ip}")
-        logger.info(f"="*50)
+        logger.info(f"Starting FAST Nmap scan for {target_ip}")
+        logger.info(f="="*50)
         
         result = NmapResult(
             target_ip=target_ip,
@@ -24,19 +24,19 @@ class NmapScanner:
         )
         
         try:
-            # Run basic nmap scan
-            cmd = ['nmap', '-sC', '-sV', target_ip]
+            # Fast scan: -T4 (aggressive timing), -F (fast mode - top 100 ports)
+            cmd = ['nmap', '-T4', '-F', '-sV', target_ip]
             logger.info(f"Executing: {' '.join(cmd)}")
             
             process = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=120  # 2 minutes max
+                timeout=60  # 1 minute max for fast scan
             )
             
             output = process.stdout
-            logger.info(f"Nmap command completed ({len(output)} characters)")
+            logger.info(f"Fast scan completed ({len(output)} characters)")
             
             if output:
                 result.raw_output = output
@@ -48,18 +48,19 @@ class NmapScanner:
                 for port in result.open_ports:
                     logger.info(f"  Port {port['port']}: {port['service']} - {port['product']}")
                 
-                # Run vulnerability scan with shorter timeout
-                logger.info("Running vulnerability scan (60s timeout)...")
-                try:
-                    vuln_output = self._run_vuln_scan(target_ip)
-                    result.vulnerabilities = self._parse_vulnerabilities(vuln_output)
-                    logger.info(f"Found {len(result.vulnerabilities)} vulnerabilities")
-                except subprocess.TimeoutExpired:
-                    logger.warning("Vulnerability scan timed out, continuing without vuln results")
-                    result.vulnerabilities = []
+                # Quick vulnerability check (only if ports found)
+                if result.open_ports:
+                    logger.info("Running quick vulnerability check (30s timeout)...")
+                    try:
+                        vuln_output = self._run_quick_vuln_scan(target_ip, result.open_ports)
+                        result.vulnerabilities = self._parse_vulnerabilities(vuln_output)
+                        logger.info(f"Found {len(result.vulnerabilities)} potential vulnerabilities")
+                    except (subprocess.TimeoutExpired, Exception) as e:
+                        logger.warning(f"Vulnerability scan skipped or timed out: {e}")
+                        result.vulnerabilities = []
                 
                 result.status = StepStatus.COMPLETED
-                logger.info("Scan completed successfully")
+                logger.info("Fast scan completed successfully")
             else:
                 logger.warning("No output from nmap")
                 result.status = StepStatus.FAILED
@@ -139,27 +140,32 @@ class NmapScanner:
         lines = output.split('\n')
         
         for line in lines:
-            if 'OS details:' in line or 'Running:' in line:
-                os_info = {
-                    'name': line.split(':', 1)[1].strip() if ':' in line else '',
-                    'accuracy': 100,
-                    'family': None,
-                    'vendor': None
-                }
-                break
+            if 'OS details:' in line or 'Running:' in line or 'Service Info:' in line:
+                if 'OS:' in line or 'Running:' in line:
+                    os_info = {
+                        'name': line.split(':', 1)[1].strip() if ':' in line else '',
+                        'accuracy': 80,
+                        'family': None,
+                        'vendor': None
+                    }
+                    break
         
         return os_info
     
-    def _run_vuln_scan(self, target_ip: str) -> str:
-        """Run vulnerability scan with timeout"""
-        cmd = ['nmap', '-sV', '--script', 'vuln', target_ip]
-        logger.info(f"Running: {' '.join(cmd)}")
+    def _run_quick_vuln_scan(self, target_ip: str, open_ports: List[Dict]) -> str:
+        """Run quick vulnerability scan on specific ports only"""
+        # Only scan specific open ports for speed
+        port_list = ','.join([str(p['port']) for p in open_ports[:5]])  # Max 5 ports
+        
+        # Use only fast vuln scripts
+        cmd = ['nmap', '-T4', '-p', port_list, '--script', 'vuln', '--script-timeout', '10s', target_ip]
+        logger.info(f"Quick vuln scan: {' '.join(cmd)}")
         
         process = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=60  # 60 seconds max for vuln scan
+            timeout=30  # 30 seconds max
         )
         
         return process.stdout
