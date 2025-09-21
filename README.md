@@ -13,9 +13,9 @@
 ## 🔧 Quick Start
 
 ```bash
-# 1. Clone and setup
+# 1. Clone and install dependencies
 git pull
-pip install flask crewai langchain-openai
+pip install -r requirements.txt
 
 # 2. Set OpenAI API key
 export OPENAI_API_KEY="sk-..."
@@ -62,6 +62,19 @@ reports/{chain_id}/agent_work/
 ├── cve_analysis.json      # CVE Analyst → PoC Hunter
 └── poc_results.json       # Final PoC findings
 ```
+
+## 📦 Dependencies
+
+Install all dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+**Key packages:**
+- `flask` - Web framework
+- `crewai` - AI agent framework
+- `langchain-openai` - OpenAI integration
+- `langchain-anthropic` - Optional Anthropic support
 
 ## 📊 Example Output
 
@@ -127,12 +140,14 @@ reports/{chain_id}/
 ### With OpenAI API Key
 ```bash
 export OPENAI_API_KEY="sk-..."
+pip install -r requirements.txt
 python app.py
 # Enter any target → Real AI analysis
 ```
 
 ### Without API Key
 ```bash
+pip install -r requirements.txt
 python app.py
 # Enter any target → Fallback pattern matching
 ```
@@ -144,8 +159,17 @@ python app.py
 # Check API key
 echo $OPENAI_API_KEY
 
-# Install dependencies
-pip install crewai langchain-openai
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+### Import errors?
+```bash
+# Make sure all dependencies are installed
+pip install -r requirements.txt
+
+# Check Python version (3.8+ required)
+python --version
 ```
 
 ### Results not showing?
@@ -178,7 +202,8 @@ pip install crewai langchain-openai
 **Just run:**
 ```bash
 export OPENAI_API_KEY="sk-..."
-git pull && python app.py
+pip install -r requirements.txt
+python app.py
 ```
 
 **Get:**
