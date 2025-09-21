@@ -1,5 +1,5 @@
 """
-API endpoints for hybrid attack chain (Mock + Real AI)
+API endpoints for final orchestrator
 """
 from flask import jsonify, request
 import threading
@@ -10,22 +10,22 @@ logger = logging.getLogger(__name__)
 
 
 def setup_realtime_api_routes(app):
-    """Setup API routes for hybrid orchestrator"""
+    """Setup API routes"""
     
     @app.post("/api/attack-chain/create")
     def create_attack_chain():
-        """Create new attack chain"""
+        """Create chain"""
         try:
-            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
+            from src.agents.final_orchestrator import get_final_orchestrator
             
             data = request.get_json()
             target = data.get("target")
             objective = data.get("objective", "full_pentest")
             
             if not target:
-                return jsonify({"success": False, "error": "Target is required"})
+                return jsonify({"success": False, "error": "Target required"})
             
-            orchestrator = get_hybrid_orchestrator()
+            orchestrator = get_final_orchestrator()
             chain = orchestrator.create_attack_chain(target, objective)
             
             logger.info(f"Created chain {chain.id} for {target}")
@@ -33,7 +33,7 @@ def setup_realtime_api_routes(app):
             return jsonify({
                 "success": True,
                 "chain_id": chain.id,
-                "message": "Hybrid attack chain created (Mock + Real AI)"
+                "message": "OpenAI-powered chain created"
             })
         except Exception as e:
             logger.error(f"Error creating chain: {e}")
@@ -41,26 +41,26 @@ def setup_realtime_api_routes(app):
     
     @app.post("/api/attack-chain/<chain_id>/execute")
     def execute_attack_chain(chain_id: str):
-        """Execute attack chain"""
+        """Execute chain"""
         try:
-            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
+            from src.agents.final_orchestrator import get_final_orchestrator
             
-            orchestrator = get_hybrid_orchestrator()
+            orchestrator = get_final_orchestrator()
             
-            def run_async_execution():
+            def run_async():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
                     result = loop.run_until_complete(
                         orchestrator.execute_attack_chain(chain_id)
                     )
-                    logger.info(f"Chain {chain_id} completed: {result.get('status')}")
+                    logger.info(f"Chain {chain_id} done: {result.get('status')}")
                 except Exception as e:
                     logger.error(f"Chain {chain_id} error: {e}")
                 finally:
                     loop.close()
             
-            thread = threading.Thread(target=run_async_execution, daemon=True)
+            thread = threading.Thread(target=run_async, daemon=True)
             thread.start()
             
             return jsonify({
@@ -73,11 +73,11 @@ def setup_realtime_api_routes(app):
     
     @app.get("/api/attack-chain/<chain_id>/status")
     def get_attack_chain_status(chain_id: str):
-        """Get real-time status"""
+        """Get status"""
         try:
-            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
+            from src.agents.final_orchestrator import get_final_orchestrator
             
-            orchestrator = get_hybrid_orchestrator()
+            orchestrator = get_final_orchestrator()
             status = orchestrator.get_chain_status(chain_id)
             
             return jsonify(status)
@@ -87,11 +87,11 @@ def setup_realtime_api_routes(app):
     
     @app.post("/api/attack-chain/<chain_id>/stop")
     def stop_attack_chain(chain_id: str):
-        """Stop execution"""
+        """Stop chain"""
         try:
-            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
+            from src.agents.final_orchestrator import get_final_orchestrator
             
-            orchestrator = get_hybrid_orchestrator()
+            orchestrator = get_final_orchestrator()
             result = orchestrator.stop_attack_chain(chain_id)
             
             return jsonify(result)
