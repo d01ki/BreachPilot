@@ -1,46 +1,32 @@
-# BreachPilot - Multi-Agent Penetration Testing Platform
-
 FROM python:3.11-slim
 
-# Install system dependencies for penetration testing tools
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     nmap \
-    nikto \
-    whois \
-    dnsutils \
+    git \
     curl \
     wget \
-    git \
-    sqlite3 \
+    whois \
+    dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Copy requirements
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p reports data logs
-
-# Set permissions
-RUN chmod +x setup.sh
+# Create directories
+RUN mkdir -p /app/data /app/reports /app/tools
 
 # Expose port
-EXPOSE 5000
-
-# Environment variables
-ENV BREACHPILOT_ENV=production
-ENV BREACHPILOT_DEMO_MODE=true
-ENV BREACHPILOT_REAL_TOOLS=false
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
+EXPOSE 8000
 
 # Run application
-CMD ["python", "app.py"]
+CMD ["python", "run.py"]
