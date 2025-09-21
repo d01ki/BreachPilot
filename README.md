@@ -1,228 +1,235 @@
-# 🚀 BreachPilot - AI-Powered Automated Penetration Testing
+# 🚀 BreachPilot - Hybrid AI Pentest Platform
+
+**Mock Scans + Real AI CVE Analysis = Best of Both Worlds**
 
 ## ✨ Features
 
-- 🔍 **OSINT Reconnaissance** - DNS, WHOIS, SSL, Subdomain enumeration
-- 🎯 **Port Scanning** - Nmap integration with service detection  
-- 🤖 **AI Vulnerability Analysis** - CrewAI-powered CVE identification with XAI
-- 📊 **Real-time Results** - Live progress and explainable AI reasoning
-- 🎭 **Simulation Mode** - Test without real tools
+- 🎭 **Mock OSINT & Nmap** - Instant results without tools
+- 🤖 **Real AI CVE Analysis** - CrewAI agents identify vulnerabilities
+- 💥 **PoC Retrieval** - Find exploits on GitHub/ExploitDB
+- 📊 **XAI Explanations** - Understand why CVEs were identified
+- 🎯 **Compact UI** - Clean, efficient interface
 
 ## 🔧 Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/d01ki/BreachPilot.git
-cd BreachPilot
-git checkout feature/dev_v2
-
-# Install dependencies
-pip install flask python-dotenv
-
-# Optional: For AI analysis (CrewAI)
-pip install crewai langchain-anthropic langchain-openai
-
-# Optional: For real scanning
-pip install dnspython python-whois requests pyOpenSSL
-sudo apt-get install nmap  # or brew install nmap (macOS)
-```
-
-### Configuration
-
-```bash
-# Set environment variables
-export ANTHROPIC_API_KEY="your-api-key"  # For AI analysis
-export SIMULATION_MODE="true"  # Use simulation mode
-```
-
-### Run
-
-```bash
-python app.py
-```
-
-Access at: **http://localhost:5000/pentest**
-
-## 🎭 Simulation Mode (Default)
-
-**No tools required!** Just pull and run:
 
 ```bash
 git pull
 python app.py
-# Enter any target (e.g., "test.example.com")
+# Visit http://localhost:5000/pentest
 ```
 
-Returns realistic simulation data:
-- OSINT: DNS, subdomains, SSL info
-- Nmap: 5 open ports with services
-- CVEs: 5 vulnerabilities with severity
+**That's it!** Enter any target and get instant mock scans.
 
-## 🤖 AI Analysis (CrewAI)
+## 🤖 Enable Real AI Analysis
 
-Set API key for CrewAI-powered analysis:
+For actual AI-powered CVE identification:
 
 ```bash
+# Set your API key
 export ANTHROPIC_API_KEY="sk-ant-..."
 # or
 export OPENAI_API_KEY="sk-..."
-```
 
-### AI Features
+# Install CrewAI
+pip install crewai langchain-anthropic
 
-1. **3 Specialized Agents**
-   - Vulnerability Analyst
-   - CVE Researcher
-   - XAI Explainer
-
-2. **Explainable AI (XAI)**
-   - WHY was CVE identified?
-   - WHAT evidence supports it?
-   - HOW can it be exploited?
-   - WHAT is the impact?
-
-3. **Results include:**
-   ```json
-   {
-     "vulnerabilities": [...],
-     "xai_explanations": {
-       "CVE-2021-44228": {
-         "why_identified": "Apache version matches vulnerable range",
-         "evidence": "Service: Apache 2.4.6 on port 8080",
-         "attack_vector": "Remote code execution via Log4j",
-         "impact": "Full system compromise possible"
-       }
-     }
-   }
-   ```
-
-## 🔍 How to Use
-
-### 1. Go to Pentest Page
-```
-http://localhost:5000/pentest
-```
-
-### 2. Enter Target
-- Simulation: Any value (e.g., "demo.target.com")
-- Real mode: Authorized target only
-
-### 3. Watch Results
-- ✅ Progress bars (0% → 50% → 100%)
-- 📋 Live execution logs
-- 🔍 OSINT results
-- 🔎 Port scan results  
-- ⚠️ Vulnerabilities with AI explanations
-
-## 📊 Workflow
-
-```
-🔍 OSINT Gathering (3s)
-   ↓ JSON saved
-🔎 Nmap Scanning (5s)
-   ↓ JSON saved
-🤖 AI CVE Analysis (4s)
-   ↓ JSON + XAI saved
-📋 Display Results
-```
-
-## 🎯 Testing
-
-### Safe Simulation Test
-```bash
-# No tools needed
+# Run
 python app.py
-
-# Enter: test.example.com
-# Results appear in 12s
 ```
 
-### Real Tool Test
-```bash
-export SIMULATION_MODE="false"
-python app.py
+## 🎯 How It Works
 
-# Enter: scanme.nmap.org
+### Phase 1: Mock Scans (3s)
+- OSINT: DNS, subdomains, IPs
+- Nmap: 5 open ports with services
+
+### Phase 2: Real AI Analysis (5-10s)
+**With API key:**
+- 🤖 CVE Analyst identifies vulnerabilities
+- 🔍 PoC Researcher finds exploits
+- 📝 XAI explains reasoning
+
+**Without API key:**
+- Pattern-based fallback matching
+
+## 📊 UI Overview
+
+### Compact Layout
+```
+┌─────────────────────────────────────┐
+│  🔍 Recon      🤖 AI      💥 Exploit │
+│  [████] 100%   [██] 50%   [░] 0%    │
+└─────────────────────────────────────┘
+
+┌──────────────────┬──────────────────┐
+│  🔎 Scan Results │ 🤖 AI Vulns      │
+│  - 5 open ports  │ CVE-2021-44228   │
+│  - 7 subdomains  │ ┌──────────────┐ │
+│                  │ │🧠 AI Reasoning│ │
+│                  │ │Why: Apache...│ │
+│                  │ │PoC: GitHub   │ │
+│                  │ └──────────────┘ │
+└──────────────────┴──────────────────┘
 ```
 
-## 📁 Output Files
+## 🧠 Real AI Agent Details
 
-Results saved to `reports/{chain_id}/`:
-
-```
-reports/
-└── abc123-def456/
-    ├── osint.json           # OSINT results
-    ├── nmap.json            # Port scan
-    └── ai_vulnerabilities.json  # AI analysis + XAI
+### CVE Analyst Agent
+```python
+Role: 'CVE Security Analyst'
+Goal: Identify CVEs with high accuracy
+Output: CVE ID, CVSS, severity, reasoning
 ```
 
-## 🧠 AI Analysis Details
+### PoC Researcher Agent
+```python
+Role: 'Exploit Researcher'
+Goal: Find working exploits
+Output: GitHub links, ExploitDB entries
+```
 
-### Without API Key (Fallback)
-- Pattern-based CVE matching
-- Basic severity assessment
-- Simple explanations
+### XAI Output Example
+```json
+{
+  "cve": "CVE-2021-44228",
+  "severity": "CRITICAL",
+  "xai_explanation": {
+    "why_identified": "Apache Tomcat 9.0.30 uses Log4j 2.x",
+    "evidence": "Port 8080 running Tomcat",
+    "poc_available": "Yes - Multiple PoCs on GitHub"
+  }
+}
+```
 
-### With API Key (CrewAI)
-- Multi-agent collaboration
-- Deep CVE research
-- Explainable reasoning
-- PoC availability check
-- Attack chain analysis
+## 📁 Results
+
+Saved to `reports/{chain_id}/`:
+- `osint.json` - Mock OSINT data
+- `nmap.json` - Mock port scan
+- `vulnerabilities.json` - Real AI CVE analysis with XAI
+
+## 🎭 Mock vs Real
+
+| Component | Type | Speed |
+|-----------|------|-------|
+| OSINT | Mock | 3s |
+| Nmap | Mock | 5s |
+| CVE Analysis | **Real AI** | 5-10s |
+| PoC Retrieval | **Real AI** | Included |
 
 ## 🐛 Troubleshooting
 
-### No results showing?
-1. Check browser console (F12)
-2. Verify simulation mode: `export SIMULATION_MODE="true"`
-3. Check logs in terminal
-
-### AI analysis not working?
-1. Set API key: `export ANTHROPIC_API_KEY="..."`
-2. Install CrewAI: `pip install crewai langchain-anthropic`
-3. Check terminal for errors
-
-### Progress bars stuck?
-1. Refresh page
-2. Check `/api/attack-chain/{id}/status` response
-3. Look for errors in browser console
-
-## 📝 Example XAI Output
-
-```
-CVE-2021-44228 (Log4Shell)
-├── Why Identified: Apache Tomcat 9.0.30 uses vulnerable Log4j
-├── Evidence: Port 8080 running http-proxy service
-├── Attack Vector: Remote code execution via JNDI injection
-└── Impact: Complete system compromise
-
-Reasoning Chain:
-1. Detected Tomcat 9.0.30 on port 8080
-2. Tomcat versions use Log4j 2.x
-3. Log4j 2.x < 2.17.0 vulnerable to CVE-2021-44228
-4. Service publicly accessible → High exploitability
-5. RCE vulnerability → Critical severity
+### No results?
+```bash
+# Check browser console (F12)
+# Verify API responded
+curl http://localhost:5000/api/attack-chain/{id}/status
 ```
 
-## ⚠️ Legal Notice
+### AI not working?
+```bash
+# Verify API key
+echo $ANTHROPIC_API_KEY
 
-**Educational purposes only**
-- Only scan authorized targets
-- Legal responsibility is yours
-- Not for malicious use
+# Check CrewAI installation
+pip show crewai
+```
 
-## 🔗 Links
+### Want full simulation?
+```bash
+# No API key needed
+# Just run and test
+python app.py
+```
 
-- Documentation: `/FIXED_IMPLEMENTATION.md`
-- API Docs: `/api/attack-chain/create`
-- Issues: GitHub Issues
+## 🔬 Testing
+
+### Instant Test (No API key)
+```bash
+python app.py
+# Enter: test.example.com
+# Result: Mock data + pattern matching
+```
+
+### Full AI Test (With API key)
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+python app.py
+# Enter: vulnerable.site.com
+# Result: Mock data + Real AI CVE analysis
+```
+
+## 📊 Example Output
+
+### Mock Scan Results
+```
+Target: demo.example.com
+- IPs: 192.168.1.100
+- Subdomains: 7 found
+- Open Ports:
+  22/tcp SSH OpenSSH 7.4
+  80/tcp HTTP Apache 2.4.6
+  443/tcp HTTPS
+  3306/tcp MySQL 5.7.30
+  8080/tcp Tomcat 9.0.30
+```
+
+### Real AI Analysis
+```
+🤖 AI Analysis Complete
+
+CVE-2021-44228 (CRITICAL)
+└─ Why: Apache Tomcat uses vulnerable Log4j
+└─ Evidence: Service version Tomcat 9.0.30
+└─ PoC: Available on GitHub
+└─ Impact: Remote code execution
+
+CVE-2018-15473 (MEDIUM)  
+└─ Why: OpenSSH 7.4 vulnerable to enum
+└─ Evidence: SSH service detected
+└─ PoC: Python script available
+└─ Impact: Username enumeration
+```
+
+## 🚀 Architecture
+
+```
+┌─────────────┐
+│   Flask     │
+│   Server    │
+└──────┬──────┘
+       │
+┌──────▼──────────────┐
+│ Hybrid Orchestrator │
+├─────────────────────┤
+│ 1. Mock OSINT (3s)  │
+│ 2. Mock Nmap (5s)   │
+│ 3. Real AI CVE (10s)│
+└─────────────────────┘
+       │
+┌──────▼──────────┐
+│   Real AI Agent │
+├─────────────────┤
+│ - CVE Analyst   │
+│ - PoC Researcher│
+│ - XAI Generator │
+└─────────────────┘
+```
+
+## 📝 Summary
+
+**Perfect for:**
+- ✅ Instant testing without tools
+- ✅ Real CVE identification with AI
+- ✅ PoC discovery
+- ✅ Learning XAI reasoning
+
+**Just:**
+```bash
+git pull && python app.py
+```
 
 ---
 
-**Version:** 3.0 (AI + Simulation Edition)
+**Version:** 4.0 (Hybrid Edition)
 **Last Updated:** 2025-09-21
-
-**🎉 Just `git pull` and `python app.py` to test!**
