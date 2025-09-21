@@ -3,132 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BreachPilot - AI-Powered Penetration Testing</title>
+    <title>BreachPilot - AI-Powered Security Testing</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    animation: {
-                        'gradient': 'gradient 6s ease infinite',
-                        'float': 'float 6s ease-in-out infinite',
-                        'glow': 'glow 2s ease-in-out infinite alternate',
-                        'matrix': 'matrix 20s linear infinite'
-                    },
-                    keyframes: {
-                        gradient: {
-                            '0%, 100%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'left center'
-                            },
-                            '50%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'right center'
-                            }
-                        },
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0px)' },
-                            '50%': { transform: 'translateY(-20px)' }
-                        },
-                        glow: {
-                            '0%': { 'box-shadow': '0 0 20px rgba(59, 130, 246, 0.5)' },
-                            '100%': { 'box-shadow': '0 0 30px rgba(59, 130, 246, 0.8)' }
-                        },
-                        matrix: {
-                            '0%': { transform: 'translateY(-100vh)' },
-                            '100%': { transform: 'translateY(100vh)' }
-                        }
-                    }
-                }
-            }
-        }
-    </script>
     <style>
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #3b82f6, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         .cyber-grid {
             background-image: 
                 linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
             background-size: 20px 20px;
         }
-        
-        .glass-morphism {
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-        
-        .gradient-text {
-            background: linear-gradient(45deg, #3b82f6, #8b5cf6, #06b6d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .cyber-border {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .cyber-border::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent);
-            animation: scan 2s linear infinite;
-        }
-        
-        @keyframes scan {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-        
-        .feature-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform-style: preserve-3d;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-8px) rotateX(5deg);
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-        }
-        
-        .matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            overflow: hidden;
-            z-index: -1;
-        }
-        
-        .matrix-char {
-            position: absolute;
-            color: rgba(59, 130, 246, 0.3);
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            animation: matrix 20s linear infinite;
-        }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen cyber-grid">
-    <!-- Matrix Background -->
-    <div class="matrix-bg" id="matrix-bg"></div>
-    
     <!-- Navigation -->
-    <nav class="glass-morphism border-b border-blue-500/20 p-4 sticky top-0 z-50">
+    <nav class="glass border-b border-blue-500/20 p-4 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center space-x-4">
                 <div class="text-2xl font-bold gradient-text">BreachPilot</div>
                 <div class="text-xs text-blue-400 bg-blue-500/10 px-2 py-1 rounded">AI-Powered</div>
             </div>
             <div class="flex space-x-4">
-                <a href="/attack-chain" class="px-4 py-2 bg-purple-600/20 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition">
-                    🔗 Attack Chain
+                <a href="/pentest" class="px-4 py-2 bg-purple-600/20 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition">
+                    ⚡ Automated Pentest
                 </a>
                 <a href="/settings" class="px-4 py-2 bg-gray-600/20 border border-gray-500/30 rounded-lg hover:bg-gray-600/30 transition">
                     ⚙️ Settings
@@ -139,74 +45,46 @@
 
     <!-- Hero Section -->
     <section class="container mx-auto px-6 py-16 text-center">
-        <div class="animate-float">
-            <h1 class="text-6xl font-bold mb-6 gradient-text">
-                Next-Gen Penetration Testing
-            </h1>
-            <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                Harness the power of AI-driven multi-agent systems for comprehensive security assessments. 
-                Automated reconnaissance, intelligent exploitation, and detailed reporting.
-            </p>
-        </div>
+        <h1 class="text-6xl font-bold mb-6 gradient-text">
+            AI-Powered Security Testing
+        </h1>
+        <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
+            Automated penetration testing with real tools, intelligent analysis, and comprehensive reporting.
+        </p>
         
-        <!-- Quick Start Cards -->
-        <div class="grid md:grid-cols-2 gap-8 mt-16">
-            <!-- Traditional Test Card -->
-            <div class="feature-card glass-morphism rounded-xl p-8 cyber-border group">
-                <div class="text-4xl mb-4 animate-glow">🎯</div>
-                <h3 class="text-2xl font-bold mb-4 text-blue-400">Traditional Penetration Test</h3>
+        <!-- Main Action Card -->
+        <div class="max-w-2xl mx-auto mt-16">
+            <div class="glass rounded-xl p-8">
+                <div class="text-4xl mb-4">⚡</div>
+                <h3 class="text-2xl font-bold mb-4 text-purple-400">Automated Penetration Test</h3>
                 <p class="text-gray-300 mb-6">
-                    Sequential AI-powered testing with real tool execution, comprehensive analysis, 
-                    and detailed reporting. Perfect for thorough security assessments.
-                </p>
-                
-                <form action="/start" method="post" class="space-y-4">
-                    <div class="group">
-                        <input type="text" name="target" required
-                               class="w-full p-4 bg-slate-800/50 border border-blue-500/30 rounded-lg focus:border-blue-400 focus:outline-none transition"
-                               placeholder="Enter target IP or hostname">
-                    </div>
-                    
-                    <div class="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" name="authorize" id="authorize" class="text-blue-500">
-                        <label for="authorize" class="text-gray-400">I authorize testing on this target</label>
-                    </div>
-                    
-                    <button type="submit" 
-                            class="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition transform hover:scale-105">
-                        🚀 Start Traditional Test
-                    </button>
-                </form>
-            </div>
-
-            <!-- Attack Chain Card -->
-            <div class="feature-card glass-morphism rounded-xl p-8 cyber-border">
-                <div class="text-4xl mb-4 animate-glow">⚡</div>
-                <h3 class="text-2xl font-bold mb-4 text-purple-400">Multi-Agent Attack Chain</h3>
-                <p class="text-gray-300 mb-6">
-                    Advanced multi-agent coordination with real-time visualization, 
-                    parallel execution, and intelligent task orchestration.
+                    Complete security assessment from OSINT gathering to exploit verification.
+                    Real-time results and detailed vulnerability reports.
                 </p>
                 
                 <div class="space-y-4">
                     <div class="text-sm text-left space-y-2 text-gray-400">
                         <div class="flex items-center space-x-2">
-                            <span class="w-2 h-2 bg-green-400 rounded-full"></span>
-                            <span>6 Specialized AI Agents</span>
+                            <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                            <span>OSINT Reconnaissance</span>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
-                            <span>Real-time Visualization</span>
+                            <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                            <span>Nmap Port Scanning</span>
                         </div>
                         <div class="flex items-center space-x-2">
                             <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
-                            <span>Parallel Task Execution</span>
+                            <span>CVE Identification</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2 h-2 bg-red-400 rounded-full"></span>
+                            <span>Exploit Verification</span>
                         </div>
                     </div>
                     
-                    <a href="/attack-chain" 
+                    <a href="/pentest" 
                        class="block w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition transform hover:scale-105 text-center">
-                        ⚡ Launch Attack Chain
+                        ⚡ Launch Pentest
                     </a>
                 </div>
             </div>
@@ -215,91 +93,48 @@
 
     <!-- Features Section -->
     <section class="container mx-auto px-6 py-16">
-        <h2 class="text-3xl font-bold text-center mb-12 gradient-text">Cutting-Edge Features</h2>
+        <h2 class="text-3xl font-bold text-center mb-12 gradient-text">Key Features</h2>
         
         <div class="grid md:grid-cols-3 gap-8">
-            <div class="glass-morphism rounded-xl p-6 hover:scale-105 transition">
-                <div class="text-3xl mb-4">🤖</div>
-                <h3 class="text-xl font-bold mb-3 text-blue-400">AI-Powered Analysis</h3>
-                <p class="text-gray-300">Claude and GPT integration for intelligent vulnerability analysis and exploitation strategies.</p>
+            <div class="glass rounded-xl p-6 hover:scale-105 transition">
+                <div class="text-3xl mb-4">🔍</div>
+                <h3 class="text-xl font-bold mb-3 text-blue-400">OSINT Intelligence</h3>
+                <p class="text-gray-300">DNS enumeration, WHOIS lookup, SSL analysis, and subdomain discovery.</p>
             </div>
             
-            <div class="glass-morphism rounded-xl p-6 hover:scale-105 transition">
-                <div class="text-3xl mb-4">🔧</div>
+            <div class="glass rounded-xl p-6 hover:scale-105 transition">
+                <div class="text-3xl mb-4">🎯</div>
                 <h3 class="text-xl font-bold mb-3 text-green-400">Real Tool Execution</h3>
-                <p class="text-gray-300">Nmap, Nikto, Metasploit, and more - with intelligent output parsing and analysis.</p>
+                <p class="text-gray-300">Nmap scanning with service detection and vulnerability assessment.</p>
             </div>
             
-            <div class="glass-morphism rounded-xl p-6 hover:scale-105 transition">
+            <div class="glass rounded-xl p-6 hover:scale-105 transition">
                 <div class="text-3xl mb-4">📊</div>
-                <h3 class="text-xl font-bold mb-3 text-purple-400">Advanced Reporting</h3>
-                <p class="text-gray-300">Comprehensive PDF reports with executive summaries and technical details.</p>
+                <h3 class="text-xl font-bold mb-3 text-purple-400">Real-time Results</h3>
+                <p class="text-gray-300">Live progress tracking with detailed vulnerability reports and CVE information.</p>
             </div>
         </div>
     </section>
 
-    <!-- Recent Tests Section -->
+    <!-- Recent Tests -->
     <section class="container mx-auto px-6 py-16">
         <div class="flex justify-between items-center mb-8">
             <h2 class="text-3xl font-bold gradient-text">Recent Tests</h2>
-            <div class="flex space-x-2">
-                <button onclick="refreshTests()" class="px-4 py-2 bg-blue-600/20 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition">
-                    🔄 Refresh
-                </button>
-                <button onclick="cleanupTests()" class="px-4 py-2 bg-red-600/20 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition">
-                    🗑️ Cleanup
-                </button>
-            </div>
+            <button onclick="refreshTests()" class="px-4 py-2 bg-blue-600/20 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition">
+                🔄 Refresh
+            </button>
         </div>
         
         <div id="recent-tests" class="space-y-4">
-            <div class="glass-morphism rounded-lg p-4 animate-pulse">
+            <div class="glass rounded-lg p-4 animate-pulse">
                 <div class="h-4 bg-gray-700 rounded mb-2"></div>
                 <div class="h-3 bg-gray-700 rounded w-2/3"></div>
             </div>
         </div>
     </section>
 
-    <!-- API Status Section -->
-    <section class="container mx-auto px-6 py-8">
-        <div class="glass-morphism rounded-xl p-6">
-            <h3 class="text-xl font-bold mb-4 text-center">System Status</h3>
-            <div class="grid md:grid-cols-3 gap-4 text-center">
-                <div class="space-y-2">
-                    <div class="text-2xl" id="anthropic-status">⚪</div>
-                    <div class="text-sm text-gray-400">Claude AI</div>
-                </div>
-                <div class="space-y-2">
-                    <div class="text-2xl" id="openai-status">⚪</div>
-                    <div class="text-sm text-gray-400">OpenAI</div>
-                </div>
-                <div class="space-y-2">
-                    <div class="text-2xl" id="tools-status">⚪</div>
-                    <div class="text-sm text-gray-400">Tools</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <script>
-        // Matrix background effect
-        function createMatrixEffect() {
-            const matrix = document.getElementById('matrix-bg');
-            const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-            
-            for (let i = 0; i < 50; i++) {
-                const char = document.createElement('div');
-                char.className = 'matrix-char';
-                char.textContent = chars[Math.floor(Math.random() * chars.length)];
-                char.style.left = Math.random() * 100 + '%';
-                char.style.animationDelay = Math.random() * 20 + 's';
-                char.style.animationDuration = (Math.random() * 10 + 10) + 's';
-                matrix.appendChild(char);
-            }
-        }
-
-        // Load recent tests
-        async function loadRecentTests() {
+        async function refreshTests() {
             try {
                 const response = await fetch('/api/jobs');
                 const data = await response.json();
@@ -308,7 +143,7 @@
                 
                 if (data.jobs && data.jobs.length > 0) {
                     container.innerHTML = data.jobs.slice(0, 5).map(job => `
-                        <div class="glass-morphism rounded-lg p-4 hover:scale-102 transition group">
+                        <div class="glass rounded-lg p-4 hover:scale-102 transition group">
                             <div class="flex justify-between items-center">
                                 <div class="flex-1">
                                     <div class="flex items-center space-x-3">
@@ -316,26 +151,10 @@
                                         <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(job.status)}">
                                             ${job.status.toUpperCase()}
                                         </span>
-                                        ${job.progress ? `<span class="text-xs text-gray-400">${job.progress}%</span>` : ''}
                                     </div>
                                     <div class="text-sm text-gray-400 mt-1">
-                                        ${new Date(job.started_at * 1000).toLocaleString()} 
-                                        ${job.size_mb ? `• ${job.size_mb} MB` : ''}
+                                        ${new Date(job.started_at * 1000).toLocaleString()}
                                     </div>
-                                </div>
-                                <div class="flex space-x-2 opacity-0 group-hover:opacity-100 transition">
-                                    ${job.status === 'completed' ? `
-                                        <a href="/results/${job.job_id}" class="px-3 py-1 bg-green-600/20 text-green-400 rounded text-sm hover:bg-green-600/30">
-                                            View
-                                        </a>
-                                    ` : job.status === 'running' ? `
-                                        <a href="/status/${job.job_id}" class="px-3 py-1 bg-blue-600/20 text-blue-400 rounded text-sm hover:bg-blue-600/30">
-                                            Monitor
-                                        </a>
-                                    ` : ''}
-                                    <button onclick="deleteJob('${job.job_id}')" class="px-3 py-1 bg-red-600/20 text-red-400 rounded text-sm hover:bg-red-600/30">
-                                        Delete
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -344,12 +163,12 @@
                     container.innerHTML = `
                         <div class="text-center py-8 text-gray-400">
                             <div class="text-4xl mb-4">🚀</div>
-                            <p>No recent tests. Start your first penetration test above!</p>
+                            <p>No recent tests. Start your first pentest above!</p>
                         </div>
                     `;
                 }
             } catch (error) {
-                console.error('Failed to load recent tests:', error);
+                console.error('Failed to load tests:', error);
             }
         }
 
@@ -362,71 +181,10 @@
             }
         }
 
-        async function deleteJob(jobId) {
-            if (!confirm('Are you sure you want to delete this test?')) return;
-            
-            try {
-                const response = await fetch(`/api/job/${jobId}`, { method: 'DELETE' });
-                if (response.ok) {
-                    loadRecentTests();
-                } else {
-                    alert('Failed to delete job');
-                }
-            } catch (error) {
-                console.error('Failed to delete job:', error);
-                alert('Failed to delete job');
-            }
-        }
-
-        async function cleanupTests() {
-            if (!confirm('This will delete all but the 5 most recent tests. Continue?')) return;
-            
-            try {
-                const response = await fetch('/api/jobs/cleanup', { method: 'POST' });
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert(`Cleaned up ${data.deleted_count} old tests`);
-                    loadRecentTests();
-                } else {
-                    alert('Cleanup failed: ' + data.error);
-                }
-            } catch (error) {
-                console.error('Cleanup failed:', error);
-                alert('Cleanup failed');
-            }
-        }
-
-        function refreshTests() {
-            loadRecentTests();
-        }
-
-        // Check system status
-        async function checkSystemStatus() {
-            try {
-                // Check API status (simplified)
-                const anthropic = document.getElementById('anthropic-status');
-                const openai = document.getElementById('openai-status');
-                const tools = document.getElementById('tools-status');
-                
-                // This would normally check actual API status
-                anthropic.textContent = '🟢';
-                openai.textContent = '🟡';
-                tools.textContent = '🟢';
-                
-            } catch (error) {
-                console.error('Status check failed:', error);
-            }
-        }
-
-        // Initialize page
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            createMatrixEffect();
-            loadRecentTests();
-            checkSystemStatus();
-            
-            // Auto-refresh recent tests every 30 seconds
-            setInterval(loadRecentTests, 30000);
+            refreshTests();
+            setInterval(refreshTests, 30000);
         });
     </script>
 </body>
