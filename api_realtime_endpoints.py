@@ -1,5 +1,5 @@
 """
-Updated API endpoints for real-time attack chain
+API endpoints for hybrid attack chain (Mock + Real AI)
 """
 from flask import jsonify, request
 import threading
@@ -10,13 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 def setup_realtime_api_routes(app):
-    """Setup real-time API routes"""
+    """Setup API routes for hybrid orchestrator"""
     
     @app.post("/api/attack-chain/create")
     def create_attack_chain():
-        """Create new attack chain with real tools"""
+        """Create new attack chain"""
         try:
-            from src.agents.realtime_orchestrator import get_realtime_orchestrator
+            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
             
             data = request.get_json()
             target = data.get("target")
@@ -25,27 +25,27 @@ def setup_realtime_api_routes(app):
             if not target:
                 return jsonify({"success": False, "error": "Target is required"})
             
-            orchestrator = get_realtime_orchestrator()
+            orchestrator = get_hybrid_orchestrator()
             chain = orchestrator.create_attack_chain(target, objective)
             
-            logger.info(f"Created attack chain {chain.id} for target: {target}")
+            logger.info(f"Created chain {chain.id} for {target}")
             
             return jsonify({
                 "success": True,
                 "chain_id": chain.id,
-                "message": "Real-time attack chain created"
+                "message": "Hybrid attack chain created (Mock + Real AI)"
             })
         except Exception as e:
-            logger.error(f"Error creating attack chain: {e}")
+            logger.error(f"Error creating chain: {e}")
             return jsonify({"success": False, "error": str(e)})
     
     @app.post("/api/attack-chain/<chain_id>/execute")
     def execute_attack_chain(chain_id: str):
-        """Execute attack chain with real tools"""
+        """Execute attack chain"""
         try:
-            from src.agents.realtime_orchestrator import get_realtime_orchestrator
+            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
             
-            orchestrator = get_realtime_orchestrator()
+            orchestrator = get_hybrid_orchestrator()
             
             def run_async_execution():
                 loop = asyncio.new_event_loop()
@@ -54,9 +54,9 @@ def setup_realtime_api_routes(app):
                     result = loop.run_until_complete(
                         orchestrator.execute_attack_chain(chain_id)
                     )
-                    logger.info(f"Chain {chain_id} execution completed: {result.get('status')}")
+                    logger.info(f"Chain {chain_id} completed: {result.get('status')}")
                 except Exception as e:
-                    logger.error(f"Chain {chain_id} execution error: {e}")
+                    logger.error(f"Chain {chain_id} error: {e}")
                 finally:
                     loop.close()
             
@@ -65,33 +65,33 @@ def setup_realtime_api_routes(app):
             
             return jsonify({
                 "success": True,
-                "message": "Attack chain execution started"
+                "message": "Execution started"
             })
         except Exception as e:
-            logger.error(f"Error executing attack chain {chain_id}: {e}")
+            logger.error(f"Error executing {chain_id}: {e}")
             return jsonify({"success": False, "error": str(e)})
     
     @app.get("/api/attack-chain/<chain_id>/status")
     def get_attack_chain_status(chain_id: str):
-        """Get real-time status with scan results"""
+        """Get real-time status"""
         try:
-            from src.agents.realtime_orchestrator import get_realtime_orchestrator
+            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
             
-            orchestrator = get_realtime_orchestrator()
+            orchestrator = get_hybrid_orchestrator()
             status = orchestrator.get_chain_status(chain_id)
             
             return jsonify(status)
         except Exception as e:
-            logger.error(f"Error getting status for {chain_id}: {e}")
+            logger.error(f"Error getting status {chain_id}: {e}")
             return jsonify({"error": str(e)})
     
     @app.post("/api/attack-chain/<chain_id>/stop")
     def stop_attack_chain(chain_id: str):
-        """Stop attack chain execution"""
+        """Stop execution"""
         try:
-            from src.agents.realtime_orchestrator import get_realtime_orchestrator
+            from src.agents.hybrid_orchestrator import get_hybrid_orchestrator
             
-            orchestrator = get_realtime_orchestrator()
+            orchestrator = get_hybrid_orchestrator()
             result = orchestrator.stop_attack_chain(chain_id)
             
             return jsonify(result)
