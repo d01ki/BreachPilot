@@ -8,6 +8,7 @@ class Config:
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
+    # GitHub Token is not required - GitHub API works without authentication
     
     # Paths
     BASE_DIR = Path(__file__).parent.parent

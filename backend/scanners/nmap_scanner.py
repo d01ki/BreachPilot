@@ -24,15 +24,26 @@ class NmapScanner:
         )
         
         try:
-            # Fast scan
-            cmd = ['nmap', '-T4', '-F', '-sV', target_ip]
+            # Comprehensive scan for better service detection
+            cmd = [
+                'nmap', 
+                '-T4',                    # Timing template 4 (aggressive)
+                '-sV',                    # Version detection
+                '-sC',                    # Default scripts
+                '--script=vuln',          # Vulnerability scripts
+                '--script-args=unsafe=1', # Allow potentially dangerous scripts
+                '--script-timeout=30s',   # Script timeout
+                '--max-retries=2',        # Retry failed attempts
+                '--host-timeout=300s',    # Host timeout
+                target_ip
+            ]
             logger.info(f"Executing: {' '.join(cmd)}")
             
             process = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=300  # Increased timeout for comprehensive scan
             )
             
             output = process.stdout

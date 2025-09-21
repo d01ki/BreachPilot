@@ -10,5 +10,6 @@ reports/
 *.log
 node_modules/
 *.pdf
+data/
 
 

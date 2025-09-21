@@ -46,6 +46,7 @@ class CVEAnalysis(BaseModel):
     xai_explanation: str = ""
     exploit_available: bool = False
     recommendation: str = ""
+    cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
 
 class AnalystResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)

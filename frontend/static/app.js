@@ -8,7 +8,8 @@ createApp({
             osintResult: null, nmapResult: null, analystResult: null,
             pocResults: [], exploitResults: [],
             osintComplete: false, nmapComplete: false, analysisComplete: false,
-            selectedCves: [], pocSearchStarted: false
+            selectedCves: [], pocSearchStarted: false,
+            expandedCves: {}
         }
     },
     methods: {
@@ -68,6 +69,35 @@ createApp({
         },
         reset() {
             Object.assign(this.$data, this.$options.data());
+        },
+        toggleCveDetails(cveId) {
+            this.expandedCves[cveId] = !this.expandedCves[cveId];
+        },
+        formatCveExplanation(explanation) {
+            if (!explanation) return '';
+            
+            // Convert markdown-like formatting to HTML
+            return explanation
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                .replace(/^/, '<p>')
+                .replace(/$/, '</p>');
+        },
+        getPortRisk(port, service) {
+            const highRiskPorts = [445, 3389, 135, 139, 88, 389, 636];
+            const mediumRiskPorts = [80, 443, 21, 22, 23, 25, 53, 110, 143, 993, 995];
+            
+            if (highRiskPorts.includes(port)) return 'HIGH';
+            if (mediumRiskPorts.includes(port)) return 'MED';
+            return 'LOW';
+        },
+        getPortRiskClass(port, service) {
+            const risk = this.getPortRisk(port, service);
+            if (risk === 'HIGH') return 'bg-red-600';
+            if (risk === 'MED') return 'bg-yellow-500';
+            return 'bg-green-500';
         }
     }
 }).mount('#app');
