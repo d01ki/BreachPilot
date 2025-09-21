@@ -15,6 +15,7 @@ class AttackStage(Enum):
     SCANNING = "scanning"
     ENUMERATION = "enumeration"
     VULNERABILITY_ANALYSIS = "vulnerability_analysis"
+    WEAPONIZATION = "weaponization"  # Added for PoC hunting
     EXPLOITATION = "exploitation"
     POST_EXPLOITATION = "post_exploitation"
     LATERAL_MOVEMENT = "lateral_movement"
