@@ -32,7 +32,11 @@ createApp({
             resultsInterval: null,
             
             // Display tabs
-            activeTab: 'progress'
+            activeTab: 'progress',
+            
+            // Progress tracking
+            scanStartTime: null,
+            lastUpdate: null
         }
     },
     methods: {
@@ -43,6 +47,8 @@ createApp({
             }
             
             this.loading = true;
+            this.scanStartTime = Date.now();
+            
             try {
                 const response = await axios.post(`${API_URL}/api/scan/start`, {
                     target_ip: this.targetIp
@@ -52,6 +58,8 @@ createApp({
                 this.currentStep = 'osint';
                 this.connectWebSocket();
                 this.startResultsPolling();
+                
+                console.log('Scan started:', response.data);
                 
                 // Auto-run OSINT
                 setTimeout(() => this.runStep('osint'), 500);
@@ -65,6 +73,7 @@ createApp({
         
         async runStep(step) {
             this.loading = true;
+            const startTime = Date.now();
             
             try {
                 let response;
@@ -72,46 +81,47 @@ createApp({
                 switch(step) {
                     case 'osint':
                         this.currentStep = 'osint';
-                        console.log('Starting OSINT scan...');
+                        console.log('[OSINT] Starting...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/osint`);
                         this.osintResult = response.data;
                         this.osintComplete = true;
-                        console.log('OSINT completed:', response.data);
+                        console.log('[OSINT] Completed in', (Date.now() - startTime) / 1000, 'seconds');
                         break;
                         
                     case 'nmap':
                         this.currentStep = 'nmap';
-                        console.log('Starting Nmap scan...');
+                        console.log('[NMAP] Starting fast scan...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/nmap`);
                         this.nmapResult = response.data;
                         this.nmapComplete = true;
-                        console.log('Nmap completed:', response.data);
+                        console.log('[NMAP] Completed in', (Date.now() - startTime) / 1000, 'seconds');
+                        console.log('[NMAP] Found', response.data.open_ports?.length || 0, 'open ports');
                         break;
                         
                     case 'analyze':
                         this.currentStep = 'analysis';
-                        console.log('Starting CVE analysis...');
+                        console.log('[ANALYSIS] Starting CVE analysis...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/analyze`);
                         this.analystResult = response.data;
                         this.analysisComplete = true;
-                        console.log('Analysis completed:', response.data);
+                        console.log('[ANALYSIS] Completed in', (Date.now() - startTime) / 1000, 'seconds');
                         break;
                         
                     case 'poc':
                         this.currentStep = 'poc_search';
-                        console.log('Searching for PoCs...');
+                        console.log('[POC] Searching for exploits...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`);
                         this.pocResults = response.data;
                         this.pocsFound = response.data.length;
-                        console.log('PoC search completed:', response.data);
+                        console.log('[POC] Found', response.data.length, 'PoCs in', (Date.now() - startTime) / 1000, 'seconds');
                         break;
                 }
                 
-                // Switch to results tab after completion
+                // Switch to results tab and load latest results
                 this.activeTab = 'results';
                 await this.loadResults();
             } catch (error) {
-                console.error(`Failed to run ${step}:`, error);
+                console.error(`[${step.toUpperCase()}] Failed:`, error);
                 alert(`Failed to run ${step}: ` + (error.response?.data?.detail || error.message));
             } finally {
                 this.loading = false;
@@ -125,10 +135,11 @@ createApp({
             }
             
             this.loading = true;
+            const startTime = Date.now();
+            
             try {
-                console.log('Approving CVEs:', this.approvedCves);
+                console.log('[EXPLOIT] Approving CVEs:', this.approvedCves);
                 
-                // Approve
                 await axios.post(
                     `${API_URL}/api/scan/${this.sessionId}/approve`,
                     this.approvedCves,
@@ -136,17 +147,16 @@ createApp({
                 );
                 this.exploitsApproved = true;
                 
-                // Execute exploits
-                console.log('Executing exploits...');
+                console.log('[EXPLOIT] Executing exploits...');
                 const response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit`);
                 this.exploitResults = response.data;
                 this.exploitsRun = response.data.length;
-                console.log('Exploits completed:', response.data);
+                console.log('[EXPLOIT] Completed in', (Date.now() - startTime) / 1000, 'seconds');
                 
                 this.activeTab = 'results';
                 await this.loadResults();
             } catch (error) {
-                console.error('Failed to execute exploits:', error);
+                console.error('[EXPLOIT] Failed:', error);
                 alert('Failed to execute exploits: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.loading = false;
@@ -156,12 +166,12 @@ createApp({
         async generateReport() {
             this.loading = true;
             try {
-                console.log('Generating report...');
+                console.log('[REPORT] Generating...');
                 await axios.post(`${API_URL}/api/scan/${this.sessionId}/report`);
                 this.reportReady = true;
-                console.log('Report generated');
+                console.log('[REPORT] Generated successfully');
             } catch (error) {
-                console.error('Failed to generate report:', error);
+                console.error('[REPORT] Failed:', error);
                 alert('Failed to generate report: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.loading = false;
@@ -173,7 +183,7 @@ createApp({
                 const response = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
                 const results = response.data;
                 
-                // Update all results from JSON files
+                // Update all results
                 if (results.osint_result) {
                     this.osintResult = results.osint_result;
                     this.osintComplete = true;
@@ -186,28 +196,29 @@ createApp({
                     this.analystResult = results.analyst_result;
                     this.analysisComplete = true;
                 }
-                if (results.poc_results && results.poc_results.length > 0) {
+                if (results.poc_results?.length > 0) {
                     this.pocResults = results.poc_results;
                     this.pocsFound = results.poc_results.length;
                 }
-                if (results.exploit_results && results.exploit_results.length > 0) {
+                if (results.exploit_results?.length > 0) {
                     this.exploitResults = results.exploit_results;
                     this.exploitsRun = results.exploit_results.length;
                 }
                 
-                console.log('Results loaded:', results);
+                this.lastUpdate = new Date().toLocaleTimeString();
+                console.log('[RESULTS] Updated at', this.lastUpdate);
             } catch (error) {
-                console.error('Failed to load results:', error);
+                console.error('[RESULTS] Failed to load:', error);
             }
         },
         
         startResultsPolling() {
-            // Poll for results every 3 seconds
+            // Poll every 2 seconds for fast updates
             this.resultsInterval = setInterval(() => {
-                if (this.sessionId) {
+                if (this.sessionId && !this.loading) {
                     this.loadResults();
                 }
-            }, 3000);
+            }, 2000);
         },
         
         stopResultsPolling() {
@@ -219,14 +230,12 @@ createApp({
         
         connectWebSocket() {
             const wsUrl = `${API_URL.replace('http', 'ws')}/ws/${this.sessionId}`;
-            console.log('Connecting to WebSocket:', wsUrl);
+            console.log('[WS] Connecting to', wsUrl);
             
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onmessage = (event) => {
                 const status = JSON.parse(event.data);
-                console.log('WebSocket status update:', status);
-                
                 this.currentStep = status.current_step;
                 this.osintComplete = status.osint_complete;
                 this.nmapComplete = status.nmap_complete;
@@ -237,11 +246,11 @@ createApp({
             };
             
             this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+                console.error('[WS] Error:', error);
             };
             
             this.ws.onclose = () => {
-                console.log('WebSocket connection closed');
+                console.log('[WS] Connection closed');
             };
         },
         
@@ -278,32 +287,45 @@ createApp({
             return JSON.stringify(obj, null, 2);
         },
         
+        getElapsedTime() {
+            if (!this.scanStartTime) return '0s';
+            const elapsed = Math.floor((Date.now() - this.scanStartTime) / 1000);
+            return `${elapsed}s`;
+        },
+        
         reset() {
             this.stopResultsPolling();
-            
-            this.targetIp = '';
-            this.sessionId = null;
-            this.currentStep = '';
-            this.loading = false;
-            this.osintResult = null;
-            this.nmapResult = null;
-            this.analystResult = null;
-            this.pocResults = [];
-            this.exploitResults = [];
-            this.osintComplete = false;
-            this.nmapComplete = false;
-            this.analysisComplete = false;
-            this.pocsFound = 0;
-            this.exploitsRun = 0;
-            this.reportReady = false;
-            this.approvedCves = [];
-            this.exploitsApproved = false;
-            this.activeTab = 'progress';
             
             if (this.ws) {
                 this.ws.close();
                 this.ws = null;
             }
+            
+            // Reset all state
+            Object.assign(this.$data, {
+                targetIp: '',
+                sessionId: null,
+                currentStep: '',
+                loading: false,
+                osintResult: null,
+                nmapResult: null,
+                analystResult: null,
+                pocResults: [],
+                exploitResults: [],
+                osintComplete: false,
+                nmapComplete: false,
+                analysisComplete: false,
+                pocsFound: 0,
+                exploitsRun: 0,
+                reportReady: false,
+                approvedCves: [],
+                exploitsApproved: false,
+                activeTab: 'progress',
+                scanStartTime: null,
+                lastUpdate: null
+            });
+            
+            console.log('[APP] Reset completed');
         }
     },
     
