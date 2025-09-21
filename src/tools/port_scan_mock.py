@@ -1,52 +1,87 @@
 """
-Simplified simulation - only port scan mock data
+Zerologon vulnerable environment mock scan
 """
 import asyncio
 from typing import Dict, Any
 
 
 async def run_mock_port_scan(target: str) -> Dict[str, Any]:
-    """Return only mock port scan data"""
-    await asyncio.sleep(2)  # Simulate scanning
+    """Return Zerologon vulnerable environment port scan"""
+    await asyncio.sleep(2)
     
     return {
         "target": target,
         "scan_type": "quick",
         "ports": [
             {
-                "port": "22",
+                "port": "88",
                 "protocol": "tcp",
                 "state": "open",
-                "service": "ssh",
-                "version": "OpenSSH 7.4"
+                "service": "kerberos",
+                "version": "Microsoft Windows Kerberos"
             },
             {
-                "port": "80",
+                "port": "135",
+                "protocol": "tcp",
+                "state": "open",
+                "service": "msrpc",
+                "version": "Microsoft Windows RPC"
+            },
+            {
+                "port": "139",
+                "protocol": "tcp",
+                "state": "open",
+                "service": "netbios-ssn",
+                "version": "Microsoft Windows netbios-ssn"
+            },
+            {
+                "port": "389",
+                "protocol": "tcp",
+                "state": "open",
+                "service": "ldap",
+                "version": "Microsoft Windows Active Directory LDAP"
+            },
+            {
+                "port": "445",
+                "protocol": "tcp",
+                "state": "open",
+                "service": "microsoft-ds",
+                "version": "Microsoft Windows Server 2016 - 2019 microsoft-ds"
+            },
+            {
+                "port": "464",
+                "protocol": "tcp",
+                "state": "open",
+                "service": "kpasswd5",
+                "version": "Microsoft Windows Kerberos password change"
+            },
+            {
+                "port": "593",
                 "protocol": "tcp",
                 "state": "open",
                 "service": "http",
-                "version": "Apache httpd 2.4.6"
+                "version": "Microsoft HTTPAPI httpd 2.0"
             },
             {
-                "port": "443",
+                "port": "636",
                 "protocol": "tcp",
                 "state": "open",
-                "service": "https",
-                "version": "Apache httpd 2.4.6"
+                "service": "ldapssl",
+                "version": "Microsoft Windows Active Directory LDAP (SSL)"
             },
             {
-                "port": "3306",
+                "port": "3268",
                 "protocol": "tcp",
                 "state": "open",
-                "service": "mysql",
-                "version": "MySQL 5.7.30"
+                "service": "ldap",
+                "version": "Microsoft Windows Active Directory LDAP"
             },
             {
-                "port": "8080",
+                "port": "3389",
                 "protocol": "tcp",
                 "state": "open",
-                "service": "http-proxy",
-                "version": "Tomcat 9.0.30"
+                "service": "ms-wbt-server",
+                "version": "Microsoft Terminal Services"
             }
         ]
     }
