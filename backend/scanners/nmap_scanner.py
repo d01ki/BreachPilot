@@ -1,1 +1,175 @@
-import json\nimport nmap\nimport subprocess\nimport re\nfrom typing import Dict, Any, List\nfrom datetime import datetime\nfrom backend.models import NmapResult, StepStatus\nfrom backend.config import config\nimport logging\n\nlogger = logging.getLogger(__name__)\n\nclass NmapScanner:\n    def __init__(self):\n        self.nm = nmap.PortScanner()\n    \n    def scan(self, target_ip: str) -> NmapResult:\n        \"\"\"Perform comprehensive Nmap scan\"\"\"\n        logger.info(f\"=\"*50)\n        logger.info(f\"Starting Nmap scan for {target_ip}\")\n        logger.info(f\"=\"*50)\n        \n        result = NmapResult(\n            target_ip=target_ip,\n            status=StepStatus.RUNNING\n        )\n        \n        try:\n            # Service detection and OS fingerprinting\n            scan_args = '-sV -O -sC --version-intensity 5'\n            logger.info(f\"Running: nmap {scan_args} {target_ip}\")\n            logger.info(\"This may take a few minutes...\")\n            \n            self.nm.scan(target_ip, arguments=scan_args)\n            logger.info(f\"Scan completed. Found hosts: {self.nm.all_hosts()}\")\n            \n            if target_ip in self.nm.all_hosts():\n                host = self.nm[target_ip]\n                logger.info(f\"Host {target_ip} is up\")\n                \n                # Extract open ports and services\n                result.open_ports = self._extract_ports(host)\n                logger.info(f\"Found {len(result.open_ports)} open ports\")\n                \n                result.services = self._extract_services(host)\n                logger.info(f\"Identified {len(result.services)} services\")\n                \n                # OS detection\n                if 'osmatch' in host:\n                    result.os_detection = self._extract_os_info(host)\n                    logger.info(f\"OS Detection: {result.os_detection.get('name', 'Unknown')}\")\n                \n                # Run vulnerability scan\n                logger.info(\"Running vulnerability scan with NSE scripts...\")\n                vuln_scan = self._run_vuln_scan(target_ip)\n                result.vulnerabilities = self._parse_vulnerabilities(vuln_scan)\n                logger.info(f\"Found {len(result.vulnerabilities)} potential vulnerabilities\")\n                \n                result.raw_output = str(self.nm[target_ip])\n                result.status = StepStatus.COMPLETED\n                logger.info(\"Nmap scan completed successfully\")\n                \n            else:\n                result.status = StepStatus.FAILED\n                logger.warning(f\"Host {target_ip} appears to be down or not responding\")\n            \n        except Exception as e:\n            logger.error(f\"Nmap scan failed: {e}\", exc_info=True)\n            result.status = StepStatus.FAILED\n        \n        # Save result to JSON\n        self._save_result(target_ip, result)\n        logger.info(f\"=\"*50)\n        \n        return result\n    \n    def _extract_ports(self, host: Dict[str, Any]) -> List[Dict[str, Any]]:\n        \"\"\"Extract open ports information\"\"\"\n        ports = []\n        \n        if 'tcp' in host:\n            for port, info in host['tcp'].items():\n                port_info = {\n                    \"port\": port,\n                    \"state\": info.get('state'),\n                    \"service\": info.get('name'),\n                    \"product\": info.get('product', ''),\n                    \"version\": info.get('version', '')\n                }\n                ports.append(port_info)\n                logger.info(f\"  Port {port}/{info.get('state')}: {info.get('name')} - {info.get('product', '')} {info.get('version', '')}\")\n        \n        return ports\n    \n    def _extract_services(self, host: Dict[str, Any]) -> List[Dict[str, Any]]:\n        \"\"\"Extract detailed service information\"\"\"\n        services = []\n        \n        if 'tcp' in host:\n            for port, info in host['tcp'].items():\n                service = {\n                    \"port\": port,\n                    \"protocol\": \"tcp\",\n                    \"name\": info.get('name'),\n                    \"product\": info.get('product', ''),\n                    \"version\": info.get('version', ''),\n                    \"extrainfo\": info.get('extrainfo', ''),\n                    \"cpe\": info.get('cpe', '')\n                }\n                services.append(service)\n        \n        return services\n    \n    def _extract_os_info(self, host: Dict[str, Any]) -> Dict[str, Any]:\n        \"\"\"Extract OS detection information\"\"\"\n        os_info = {}\n        \n        if 'osmatch' in host and host['osmatch']:\n            best_match = host['osmatch'][0]\n            os_info = {\n                \"name\": best_match.get('name'),\n                \"accuracy\": best_match.get('accuracy'),\n                \"family\": best_match.get('osclass', [{}])[0].get('osfamily') if best_match.get('osclass') else None,\n                \"vendor\": best_match.get('osclass', [{}])[0].get('vendor') if best_match.get('osclass') else None\n            }\n        \n        return os_info\n    \n    def _run_vuln_scan(self, target_ip: str) -> str:\n        \"\"\"Run Nmap vulnerability scripts\"\"\"\n        try:\n            cmd = [\n                config.NMAP_CMD,\n                '-sV',\n                '--script', 'vuln',\n                target_ip\n            ]\n            logger.info(f\"Running: {' '.join(cmd)}\")\n            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)\n            \n            if result.stdout:\n                logger.info(\"Vulnerability scan output received\")\n            \n            return result.stdout\n        except Exception as e:\n            logger.error(f\"Vulnerability scan failed: {e}\")\n            return \"\"\n    \n    def _parse_vulnerabilities(self, vuln_output: str) -> List[Dict[str, Any]]:\n        \"\"\"Parse vulnerability scan output\"\"\"\n        vulnerabilities = []\n        \n        # Parse CVE references\n        cve_pattern = r'(CVE-\\d{4}-\\d{4,7})'\n        cves = re.findall(cve_pattern, vuln_output)\n        \n        for cve in set(cves):\n            # Extract context around CVE\n            context = self._extract_cve_context(vuln_output, cve)\n            vuln = {\n                \"cve_id\": cve,\n                \"context\": context,\n                \"severity\": self._estimate_severity(context)\n            }\n            vulnerabilities.append(vuln)\n            logger.info(f\"  Found CVE: {cve} ({vuln['severity']} severity)\")\n        \n        # Parse script output for known vulnerabilities\n        script_pattern = r'\\|(.*?):.*?VULNERABLE'\n        vulnerable_scripts = re.findall(script_pattern, vuln_output, re.MULTILINE)\n        \n        for script in vulnerable_scripts:\n            if not any(v.get('description') == script for v in vulnerabilities):\n                vulnerabilities.append({\n                    \"description\": script.strip(),\n                    \"type\": \"script_detection\",\n                    \"severity\": \"unknown\"\n                })\n                logger.info(f\"  Vulnerability detected: {script.strip()}\")\n        \n        return vulnerabilities\n    \n    def _extract_cve_context(self, output: str, cve: str) -> str:\n        \"\"\"Extract context around CVE mention\"\"\"\n        lines = output.split('\\n')\n        context_lines = []\n        \n        for i, line in enumerate(lines):\n            if cve in line:\n                # Get surrounding lines\n                start = max(0, i - 2)\n                end = min(len(lines), i + 3)\n                context_lines = lines[start:end]\n                break\n        \n        return ' '.join(context_lines)\n    \n    def _estimate_severity(self, context: str) -> str:\n        \"\"\"Estimate severity from context\"\"\"\n        context_lower = context.lower()\n        \n        if any(word in context_lower for word in ['critical', 'remote code execution', 'rce']):\n            return 'critical'\n        elif any(word in context_lower for word in ['high', 'authentication bypass', 'privilege escalation']):\n            return 'high'\n        elif any(word in context_lower for word in ['medium', 'denial of service', 'dos']):\n            return 'medium'\n        elif any(word in context_lower for word in ['low', 'information disclosure']):\n            return 'low'\n        else:\n            return 'unknown'\n    \n    def _save_result(self, target_ip: str, result: NmapResult):\n        \"\"\"Save Nmap result to JSON file\"\"\"\n        output_file = config.DATA_DIR / f\"{target_ip}_nmap.json\"\n        with open(output_file, 'w') as f:\n            json.dump(result.model_dump(), f, indent=2, default=str)\n        logger.info(f\"Nmap result saved to {output_file}\")\n
+import json
+import nmap
+import subprocess
+import re
+from typing import Dict, Any, List
+from datetime import datetime
+from backend.models import NmapResult, StepStatus
+from backend.config import config
+import logging
+
+logger = logging.getLogger(__name__)
+
+class NmapScanner:
+    def __init__(self):
+        self.nm = nmap.PortScanner()
+    
+    def scan(self, target_ip: str) -> NmapResult:
+        logger.info(f"Starting Nmap scan for {target_ip}")
+        
+        result = NmapResult(
+            target_ip=target_ip,
+            status=StepStatus.RUNNING
+        )
+        
+        try:
+            scan_args = '-sV -O -sC --version-intensity 5'
+            logger.info(f"Running: nmap {scan_args} {target_ip}")
+            
+            self.nm.scan(target_ip, arguments=scan_args)
+            logger.info(f"Scan completed. Found hosts: {self.nm.all_hosts()}")
+            
+            if target_ip in self.nm.all_hosts():
+                host = self.nm[target_ip]
+                logger.info(f"Host {target_ip} is up")
+                
+                result.open_ports = self._extract_ports(host)
+                logger.info(f"Found {len(result.open_ports)} open ports")
+                
+                result.services = self._extract_services(host)
+                logger.info(f"Identified {len(result.services)} services")
+                
+                if 'osmatch' in host:
+                    result.os_detection = self._extract_os_info(host)
+                    logger.info(f"OS Detection: {result.os_detection.get('name', 'Unknown')}")
+                
+                logger.info("Running vulnerability scan...")
+                vuln_scan = self._run_vuln_scan(target_ip)
+                result.vulnerabilities = self._parse_vulnerabilities(vuln_scan)
+                logger.info(f"Found {len(result.vulnerabilities)} vulnerabilities")
+                
+                result.raw_output = str(self.nm[target_ip])
+                result.status = StepStatus.COMPLETED
+                logger.info("Nmap scan completed successfully")
+                
+            else:
+                result.status = StepStatus.FAILED
+                logger.warning(f"Host {target_ip} appears to be down")
+            
+        except Exception as e:
+            logger.error(f"Nmap scan failed: {e}", exc_info=True)
+            result.status = StepStatus.FAILED
+        
+        self._save_result(target_ip, result)
+        return result
+    
+    def _extract_ports(self, host: Dict[str, Any]) -> List[Dict[str, Any]]:
+        ports = []
+        if 'tcp' in host:
+            for port, info in host['tcp'].items():
+                port_info = {
+                    "port": port,
+                    "state": info.get('state'),
+                    "service": info.get('name'),
+                    "product": info.get('product', ''),
+                    "version": info.get('version', '')
+                }
+                ports.append(port_info)
+                logger.info(f"  Port {port}: {info.get('name')} - {info.get('product', '')}")
+        return ports
+    
+    def _extract_services(self, host: Dict[str, Any]) -> List[Dict[str, Any]]:
+        services = []
+        if 'tcp' in host:
+            for port, info in host['tcp'].items():
+                service = {
+                    "port": port,
+                    "protocol": "tcp",
+                    "name": info.get('name'),
+                    "product": info.get('product', ''),
+                    "version": info.get('version', ''),
+                    "extrainfo": info.get('extrainfo', ''),
+                    "cpe": info.get('cpe', '')
+                }
+                services.append(service)
+        return services
+    
+    def _extract_os_info(self, host: Dict[str, Any]) -> Dict[str, Any]:
+        os_info = {}
+        if 'osmatch' in host and host['osmatch']:
+            best_match = host['osmatch'][0]
+            os_info = {
+                "name": best_match.get('name'),
+                "accuracy": best_match.get('accuracy'),
+                "family": best_match.get('osclass', [{}])[0].get('osfamily') if best_match.get('osclass') else None,
+                "vendor": best_match.get('osclass', [{}])[0].get('vendor') if best_match.get('osclass') else None
+            }
+        return os_info
+    
+    def _run_vuln_scan(self, target_ip: str) -> str:
+        try:
+            cmd = [config.NMAP_CMD, '-sV', '--script', 'vuln', target_ip]
+            logger.info(f"Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            return result.stdout
+        except Exception as e:
+            logger.error(f"Vulnerability scan failed: {e}")
+            return ""
+    
+    def _parse_vulnerabilities(self, vuln_output: str) -> List[Dict[str, Any]]:
+        vulnerabilities = []
+        cve_pattern = r'(CVE-\d{4}-\d{4,7})'
+        cves = re.findall(cve_pattern, vuln_output)
+        
+        for cve in set(cves):
+            context = self._extract_cve_context(vuln_output, cve)
+            vuln = {
+                "cve_id": cve,
+                "context": context,
+                "severity": self._estimate_severity(context)
+            }
+            vulnerabilities.append(vuln)
+            logger.info(f"  Found CVE: {cve}")
+        
+        script_pattern = r'\|(.*?):.*?VULNERABLE'
+        vulnerable_scripts = re.findall(script_pattern, vuln_output, re.MULTILINE)
+        
+        for script in vulnerable_scripts:
+            if not any(v.get('description') == script for v in vulnerabilities):
+                vulnerabilities.append({
+                    "description": script.strip(),
+                    "type": "script_detection",
+                    "severity": "unknown"
+                })
+        
+        return vulnerabilities
+    
+    def _extract_cve_context(self, output: str, cve: str) -> str:
+        lines = output.split('\n')
+        context_lines = []
+        for i, line in enumerate(lines):
+            if cve in line:
+                start = max(0, i - 2)
+                end = min(len(lines), i + 3)
+                context_lines = lines[start:end]
+                break
+        return ' '.join(context_lines)
+    
+    def _estimate_severity(self, context: str) -> str:
+        context_lower = context.lower()
+        if any(word in context_lower for word in ['critical', 'remote code execution', 'rce']):
+            return 'critical'
+        elif any(word in context_lower for word in ['high', 'authentication bypass', 'privilege escalation']):
+            return 'high'
+        elif any(word in context_lower for word in ['medium', 'denial of service', 'dos']):
+            return 'medium'
+        elif any(word in context_lower for word in ['low', 'information disclosure']):
+            return 'low'
+        else:
+            return 'unknown'
+    
+    def _save_result(self, target_ip: str, result: NmapResult):
+        output_file = config.DATA_DIR / f"{target_ip}_nmap.json"
+        with open(output_file, 'w') as f:
+            json.dump(result.model_dump(), f, indent=2, default=str)
+        logger.info(f"Nmap result saved to {output_file}")
