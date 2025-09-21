@@ -10,7 +10,7 @@ createApp({
             currentStep: '',
             loading: false,
             
-            // Results
+            // Results from JSON files
             osintResult: null,
             nmapResult: null,
             analystResult: null,
@@ -29,6 +29,7 @@ createApp({
             approvedCves: [],
             exploitsApproved: false,
             ws: null,
+            resultsInterval: null,
             
             // Display tabs
             activeTab: 'progress'
@@ -50,6 +51,7 @@ createApp({
                 this.sessionId = response.data.session_id;
                 this.currentStep = 'osint';
                 this.connectWebSocket();
+                this.startResultsPolling();
                 
                 // Auto-run OSINT
                 setTimeout(() => this.runStep('osint'), 500);
@@ -63,7 +65,6 @@ createApp({
         
         async runStep(step) {
             this.loading = true;
-            this.activeTab = 'progress';
             
             try {
                 let response;
@@ -71,38 +72,44 @@ createApp({
                 switch(step) {
                     case 'osint':
                         this.currentStep = 'osint';
+                        console.log('Starting OSINT scan...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/osint`);
                         this.osintResult = response.data;
                         this.osintComplete = true;
-                        this.activeTab = 'results';
+                        console.log('OSINT completed:', response.data);
                         break;
                         
                     case 'nmap':
                         this.currentStep = 'nmap';
+                        console.log('Starting Nmap scan...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/nmap`);
                         this.nmapResult = response.data;
                         this.nmapComplete = true;
-                        this.activeTab = 'results';
+                        console.log('Nmap completed:', response.data);
                         break;
                         
                     case 'analyze':
                         this.currentStep = 'analysis';
+                        console.log('Starting CVE analysis...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/analyze`);
                         this.analystResult = response.data;
                         this.analysisComplete = true;
-                        this.activeTab = 'results';
+                        console.log('Analysis completed:', response.data);
                         break;
                         
                     case 'poc':
                         this.currentStep = 'poc_search';
+                        console.log('Searching for PoCs...');
                         response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`);
                         this.pocResults = response.data;
                         this.pocsFound = response.data.length;
-                        this.activeTab = 'results';
+                        console.log('PoC search completed:', response.data);
                         break;
                 }
                 
-                await this.updateStatus();
+                // Switch to results tab after completion
+                this.activeTab = 'results';
+                await this.loadResults();
             } catch (error) {
                 console.error(`Failed to run ${step}:`, error);
                 alert(`Failed to run ${step}: ` + (error.response?.data?.detail || error.message));
@@ -119,6 +126,8 @@ createApp({
             
             this.loading = true;
             try {
+                console.log('Approving CVEs:', this.approvedCves);
+                
                 // Approve
                 await axios.post(
                     `${API_URL}/api/scan/${this.sessionId}/approve`,
@@ -128,12 +137,14 @@ createApp({
                 this.exploitsApproved = true;
                 
                 // Execute exploits
+                console.log('Executing exploits...');
                 const response = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit`);
                 this.exploitResults = response.data;
                 this.exploitsRun = response.data.length;
-                this.activeTab = 'results';
+                console.log('Exploits completed:', response.data);
                 
-                await this.updateStatus();
+                this.activeTab = 'results';
+                await this.loadResults();
             } catch (error) {
                 console.error('Failed to execute exploits:', error);
                 alert('Failed to execute exploits: ' + (error.response?.data?.detail || error.message));
@@ -145,9 +156,10 @@ createApp({
         async generateReport() {
             this.loading = true;
             try {
+                console.log('Generating report...');
                 await axios.post(`${API_URL}/api/scan/${this.sessionId}/report`);
                 this.reportReady = true;
-                await this.updateStatus();
+                console.log('Report generated');
             } catch (error) {
                 console.error('Failed to generate report:', error);
                 alert('Failed to generate report: ' + (error.response?.data?.detail || error.message));
@@ -156,28 +168,65 @@ createApp({
             }
         },
         
-        async updateStatus() {
+        async loadResults() {
             try {
-                const response = await axios.get(`${API_URL}/api/scan/${this.sessionId}/status`);
-                const status = response.data;
+                const response = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
+                const results = response.data;
                 
-                this.currentStep = status.current_step;
-                this.osintComplete = status.osint_complete;
-                this.nmapComplete = status.nmap_complete;
-                this.analysisComplete = status.analysis_complete;
-                this.pocsFound = status.pocs_found;
-                this.exploitsRun = status.exploits_run;
-                this.reportReady = status.report_ready;
+                // Update all results from JSON files
+                if (results.osint_result) {
+                    this.osintResult = results.osint_result;
+                    this.osintComplete = true;
+                }
+                if (results.nmap_result) {
+                    this.nmapResult = results.nmap_result;
+                    this.nmapComplete = true;
+                }
+                if (results.analyst_result) {
+                    this.analystResult = results.analyst_result;
+                    this.analysisComplete = true;
+                }
+                if (results.poc_results && results.poc_results.length > 0) {
+                    this.pocResults = results.poc_results;
+                    this.pocsFound = results.poc_results.length;
+                }
+                if (results.exploit_results && results.exploit_results.length > 0) {
+                    this.exploitResults = results.exploit_results;
+                    this.exploitsRun = results.exploit_results.length;
+                }
+                
+                console.log('Results loaded:', results);
             } catch (error) {
-                console.error('Failed to update status:', error);
+                console.error('Failed to load results:', error);
+            }
+        },
+        
+        startResultsPolling() {
+            // Poll for results every 3 seconds
+            this.resultsInterval = setInterval(() => {
+                if (this.sessionId) {
+                    this.loadResults();
+                }
+            }, 3000);
+        },
+        
+        stopResultsPolling() {
+            if (this.resultsInterval) {
+                clearInterval(this.resultsInterval);
+                this.resultsInterval = null;
             }
         },
         
         connectWebSocket() {
-            this.ws = new WebSocket(`${API_URL.replace('http', 'ws')}/ws/${this.sessionId}`);
+            const wsUrl = `${API_URL.replace('http', 'ws')}/ws/${this.sessionId}`;
+            console.log('Connecting to WebSocket:', wsUrl);
+            
+            this.ws = new WebSocket(wsUrl);
             
             this.ws.onmessage = (event) => {
                 const status = JSON.parse(event.data);
+                console.log('WebSocket status update:', status);
+                
                 this.currentStep = status.current_step;
                 this.osintComplete = status.osint_complete;
                 this.nmapComplete = status.nmap_complete;
@@ -225,10 +274,13 @@ createApp({
         },
         
         formatJson(obj) {
+            if (!obj) return 'No data';
             return JSON.stringify(obj, null, 2);
         },
         
         reset() {
+            this.stopResultsPolling();
+            
             this.targetIp = '';
             this.sessionId = null;
             this.currentStep = '';
@@ -256,6 +308,7 @@ createApp({
     },
     
     beforeUnmount() {
+        this.stopResultsPolling();
         if (this.ws) {
             this.ws.close();
         }
