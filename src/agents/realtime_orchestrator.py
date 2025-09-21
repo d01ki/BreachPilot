@@ -1,11 +1,11 @@
 """
-Real-time Multi-Agent Orchestrator with actual tool execution
-リアルタイム実行とWebUI表示対応
+Real-time orchestrator with simulation mode and AI analysis
 """
 import asyncio
 import json
 import time
 import uuid
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -13,35 +13,65 @@ import logging
 
 from .attack_chain_models import AttackChain, AttackTask, AgentState, TaskStatus, AttackStage, AgentRole
 from .shared_knowledge import SharedKnowledgeBase
-from ..tools.real_scanning_tools import run_osint, run_nmap_scan, identify_vulnerabilities
+
+# Check for simulation mode
+SIMULATION_MODE = os.getenv("SIMULATION_MODE", "true").lower() == "true"
+
+if SIMULATION_MODE:
+    from ..tools.simulation_tools import (
+        run_simulation_osint,
+        run_simulation_nmap,
+        run_simulation_vuln_scan
+    )
+    logging.info("🎭 Running in SIMULATION MODE")
+else:
+    try:
+        from ..tools.real_scanning_tools import run_osint, run_nmap_scan, identify_vulnerabilities
+        logging.info("🔧 Running in REAL MODE")
+    except ImportError:
+        logging.warning("⚠️ Real tools not available, falling back to simulation")
+        SIMULATION_MODE = True
+        from ..tools.simulation_tools import (
+            run_simulation_osint,
+            run_simulation_nmap,
+            run_simulation_vuln_scan
+        )
+
+# AI Analysis
+try:
+    from .ai_vulnerability_analyst import get_ai_vulnerability_analyst
+    AI_ANALYSIS_AVAILABLE = True
+except ImportError:
+    AI_ANALYSIS_AVAILABLE = False
+    logging.warning("⚠️ AI analysis not available")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class RealTimeOrchestrator:
-    """Real-time orchestrator with actual tool execution"""
+    """Real-time orchestrator with simulation and AI analysis"""
     
     def __init__(self):
         self.knowledge_base = SharedKnowledgeBase()
         self.active_chains: Dict[str, AttackChain] = {}
         self.execution_logs: Dict[str, List[Dict[str, Any]]] = {}
-        self.scan_results: Dict[str, Dict[str, Any]] = {}  # Store results by chain_id
+        self.scan_results: Dict[str, Dict[str, Any]] = {}
         
-        logger.info("RealTimeOrchestrator initialized")
+        logger.info(f"RealTimeOrchestrator initialized (Simulation: {SIMULATION_MODE})")
     
     def create_attack_chain(self, target: str, objective: str) -> AttackChain:
-        """Create attack chain with real tools"""
+        """Create attack chain"""
         chain = AttackChain(
             name=f"Pentest: {target}",
             target=target,
             objective=objective
         )
         
-        # Define real attack tasks
+        # Define tasks
         chain.tasks = [
             AttackTask(
-                name="OSINT Reconnaissance",
+                name="OSINT Intelligence Gathering",
                 stage=AttackStage.RECONNAISSANCE,
                 agent_role=AgentRole.RECON_SPECIALIST,
                 priority=10,
@@ -52,19 +82,19 @@ class RealTimeOrchestrator:
                 name="Nmap Port Scan",
                 stage=AttackStage.SCANNING,
                 agent_role=AgentRole.RECON_SPECIALIST,
-                dependencies=[],  # Will be set after first task
+                dependencies=[],
                 priority=9,
                 estimated_duration=60,
-                metadata={"target": target, "tool": "nmap", "scan_type": "quick"}
+                metadata={"target": target, "tool": "nmap"}
             ),
             AttackTask(
-                name="Vulnerability Analysis",
+                name="AI Vulnerability Analysis",
                 stage=AttackStage.VULNERABILITY_ANALYSIS,
                 agent_role=AgentRole.VULNERABILITY_ANALYST,
-                dependencies=[],  # Will be set after scan
+                dependencies=[],
                 priority=8,
                 estimated_duration=30,
-                metadata={"target": target, "tool": "vuln_scan"}
+                metadata={"target": target, "tool": "ai_vuln_scan"}
             )
         ]
         
@@ -78,7 +108,8 @@ class RealTimeOrchestrator:
         self.scan_results[chain.id] = {
             "osint": {},
             "nmap": {},
-            "vulnerabilities": {}
+            "vulnerabilities": {},
+            "ai_analysis": {}
         }
         
         self._log(chain.id, "info", f"Attack chain created for {target}")
@@ -94,7 +125,7 @@ class RealTimeOrchestrator:
             agents[agent_id] = AgentState(
                 id=agent_id,
                 role=role,
-                capabilities=["osint", "nmap", "vuln_scan"] if role == AgentRole.RECON_SPECIALIST else ["cve_analysis"]
+                capabilities=["osint", "nmap", "ai_analysis"]
             )
         return agents
     
@@ -113,7 +144,7 @@ class RealTimeOrchestrator:
         logger.info(f"[{chain_id[:8]}] {message}")
     
     async def execute_attack_chain(self, chain_id: str) -> Dict[str, Any]:
-        """Execute attack chain with real tools"""
+        """Execute attack chain"""
         if chain_id not in self.active_chains:
             return {"error": "Chain not found"}
         
@@ -121,11 +152,10 @@ class RealTimeOrchestrator:
         chain.status = "running"
         chain.started_at = datetime.now()
         
-        self._log(chain_id, "info", "Starting real-time attack chain execution")
+        self._log(chain_id, "info", f"Starting execution ({'Simulation' if SIMULATION_MODE else 'Real'} mode)")
         
         try:
             for task in chain.tasks:
-                # Check dependencies
                 if not self._are_dependencies_met(task, chain):
                     continue
                 
@@ -134,7 +164,7 @@ class RealTimeOrchestrator:
                 
                 self._log(chain_id, "info", f"Executing: {task.name}")
                 
-                # Execute task with real tools
+                # Execute task
                 result = await self._execute_real_task(task, chain)
                 
                 task.status = TaskStatus.COMPLETED
@@ -150,9 +180,10 @@ class RealTimeOrchestrator:
                 elif tool == "nmap":
                     self.scan_results[chain_id]["nmap"] = result
                     self._save_results(chain_id, "nmap", result)
-                elif tool == "vuln_scan":
+                elif tool == "ai_vuln_scan":
                     self.scan_results[chain_id]["vulnerabilities"] = result
-                    self._save_results(chain_id, "vulnerabilities", result)
+                    self.scan_results[chain_id]["ai_analysis"] = result.get("ai_reasoning", {})
+                    self._save_results(chain_id, "ai_vulnerabilities", result)
                 
                 self._log(chain_id, "success", f"Completed: {task.name} ({task.actual_duration}s)")
             
@@ -168,32 +199,49 @@ class RealTimeOrchestrator:
             return {"error": str(e)}
     
     async def _execute_real_task(self, task: AttackTask, chain: AttackChain) -> Dict[str, Any]:
-        """Execute task with real tools"""
+        """Execute task with simulation or real tools"""
         target = task.metadata.get("target")
         tool = task.metadata.get("tool")
         
         try:
             if tool == "osint":
-                self._log(chain.id, "info", f"Running OSINT reconnaissance on {target}")
-                result = await run_osint(target)
-                self._log(chain.id, "info", f"OSINT found {len(result.get('subdomains', []))} subdomains")
+                self._log(chain.id, "info", f"Running OSINT on {target}")
+                if SIMULATION_MODE:
+                    result = await run_simulation_osint(target)
+                else:
+                    result = await run_osint(target)
+                self._log(chain.id, "info", f"OSINT complete: {len(result.get('subdomains', []))} subdomains found")
                 return result
             
             elif tool == "nmap":
                 scan_type = task.metadata.get("scan_type", "quick")
-                self._log(chain.id, "info", f"Starting Nmap {scan_type} scan on {target}")
-                result = await run_nmap_scan(target, scan_type)
+                self._log(chain.id, "info", f"Starting Nmap {scan_type} scan")
+                if SIMULATION_MODE:
+                    result = await run_simulation_nmap(target, scan_type)
+                else:
+                    result = await run_nmap_scan(target, scan_type)
                 ports_found = len(result.get("ports", []))
-                self._log(chain.id, "info", f"Nmap scan found {ports_found} open ports")
+                self._log(chain.id, "info", f"Scan complete: {ports_found} open ports")
                 return result
             
-            elif tool == "vuln_scan":
-                self._log(chain.id, "info", "Analyzing services for vulnerabilities")
+            elif tool == "ai_vuln_scan":
+                self._log(chain.id, "info", "Starting AI vulnerability analysis")
                 nmap_results = self.scan_results.get(chain.id, {}).get("nmap", {})
-                result = await identify_vulnerabilities(nmap_results)
-                vulns_found = len(result.get("vulnerabilities", []))
-                self._log(chain.id, "warning" if vulns_found > 0 else "info", 
-                         f"Found {vulns_found} potential vulnerabilities")
+                osint_results = self.scan_results.get(chain.id, {}).get("osint", {})
+                
+                if AI_ANALYSIS_AVAILABLE:
+                    analyst = get_ai_vulnerability_analyst()
+                    result = await analyst.analyze_vulnerabilities(nmap_results, osint_results)
+                    vulns_found = len(result.get("vulnerabilities", []))
+                    self._log(chain.id, "success", f"AI analysis complete: {vulns_found} vulnerabilities identified")
+                else:
+                    if SIMULATION_MODE:
+                        result = await run_simulation_vuln_scan(nmap_results)
+                    else:
+                        result = await identify_vulnerabilities(nmap_results)
+                    vulns_found = len(result.get("vulnerabilities", []))
+                    self._log(chain.id, "info", f"Pattern-based analysis: {vulns_found} vulnerabilities")
+                
                 return result
             
             else:
@@ -259,7 +307,7 @@ class RealTimeOrchestrator:
             "status": chain.status,
             "progress": progress,
             "current_task": current_task.name if current_task else None,
-            "logs": self.execution_logs.get(chain_id, [])[-20:],  # Last 20 logs
+            "logs": self.execution_logs.get(chain_id, [])[-20:],
             "results": self.scan_results.get(chain_id, {}),
             "agent_states": [
                 {
