@@ -1,142 +1,228 @@
-# 🚀 BreachPilot - Automated Penetration Testing
-
-AI-powered automated penetration testing with real tools and intelligent analysis.
+# 🚀 BreachPilot - AI-Powered Automated Penetration Testing
 
 ## ✨ Features
 
 - 🔍 **OSINT Reconnaissance** - DNS, WHOIS, SSL, Subdomain enumeration
-- 🎯 **Real Tool Execution** - Actual Nmap scans with service detection
-- 🛡️ **CVE Identification** - NVD API integration for vulnerability detection
-- 📊 **Real-time Results** - Live progress bars and result display
-- 📋 **Detailed Reports** - JSON output for each phase
+- 🎯 **Port Scanning** - Nmap integration with service detection  
+- 🤖 **AI Vulnerability Analysis** - CrewAI-powered CVE identification with XAI
+- 📊 **Real-time Results** - Live progress and explainable AI reasoning
+- 🎭 **Simulation Mode** - Test without real tools
 
 ## 🔧 Quick Start
 
-### 1. Install Dependencies
+### Installation
 
 ```bash
-# Python packages
-pip install flask python-dotenv dnspython python-whois requests pyOpenSSL
+# Clone repository
+git clone https://github.com/d01ki/BreachPilot.git
+cd BreachPilot
+git checkout feature/dev_v2
 
-# System tools
-# Ubuntu/Debian:
-sudo apt-get install nmap
+# Install dependencies
+pip install flask python-dotenv
 
-# macOS:
-brew install nmap
+# Optional: For AI analysis (CrewAI)
+pip install crewai langchain-anthropic langchain-openai
 
-# Windows:
-# Download from https://nmap.org/download.html
+# Optional: For real scanning
+pip install dnspython python-whois requests pyOpenSSL
+sudo apt-get install nmap  # or brew install nmap (macOS)
 ```
 
-### 2. Run the Application
+### Configuration
+
+```bash
+# Set environment variables
+export ANTHROPIC_API_KEY="your-api-key"  # For AI analysis
+export SIMULATION_MODE="true"  # Use simulation mode
+```
+
+### Run
 
 ```bash
 python app.py
 ```
 
-### 3. Access the Web UI
+Access at: **http://localhost:5000/pentest**
 
-```
-🌐 Main Page:    http://localhost:5000
-⚡ Pentest:      http://localhost:5000/pentest
-⚙️ Settings:    http://localhost:5000/settings
-```
+## 🎭 Simulation Mode (Default)
 
-## 🎯 How to Use
+**No tools required!** Just pull and run:
 
-1. **Go to Pentest Page** - http://localhost:5000/pentest
-2. **Enter Target** - Domain or IP address
-3. **Click "Start Pentest"**
-4. **Watch Real-time Results**
-   - Progress bars for each agent
-   - Live logs
-   - OSINT, Nmap, and CVE results
-
-## 📁 Project Structure
-
-```
-BreachPilot/
-├── app.py                          # Main Flask application
-├── api_realtime_endpoints.py      # API endpoints
-├── src/
-│   ├── tools/
-│   │   └── real_scanning_tools.py # OSINT, Nmap, CVE tools
-│   └── agents/
-│       └── realtime_orchestrator.py # Task orchestration
-├── templates/
-│   ├── index.html                  # Home page
-│   └── pentest.html               # Pentest UI
-└── reports/                        # JSON results (auto-generated)
-    └── {chain_id}/
-        ├── osint.json
-        ├── nmap.json
-        └── vulnerabilities.json
-```
-
-## 🔍 Testing
-
-Use these safe targets for testing:
-
-```
-scanme.nmap.org      # Official Nmap test server
-testphp.vulnweb.com  # Vulnerability testing site
-```
-
-## ⚠️ Important Notes
-
-1. **Only scan authorized targets**
-2. **Legal responsibility is yours**
-3. **Not for production use**
-
-## 🐛 Troubleshooting
-
-### Results not showing?
-- Check browser console (F12) for errors
-- Verify `/api/attack-chain/{id}/status` returns data
-- Check `reports/{chain_id}/` for JSON files
-
-### Nmap not found?
 ```bash
-which nmap
-nmap --version
+git pull
+python app.py
+# Enter any target (e.g., "test.example.com")
 ```
 
-### DNS resolution errors?
+Returns realistic simulation data:
+- OSINT: DNS, subdomains, SSL info
+- Nmap: 5 open ports with services
+- CVEs: 5 vulnerabilities with severity
+
+## 🤖 AI Analysis (CrewAI)
+
+Set API key for CrewAI-powered analysis:
+
 ```bash
-python -c "import dns.resolver; print('OK')"
+export ANTHROPIC_API_KEY="sk-ant-..."
+# or
+export OPENAI_API_KEY="sk-..."
 ```
+
+### AI Features
+
+1. **3 Specialized Agents**
+   - Vulnerability Analyst
+   - CVE Researcher
+   - XAI Explainer
+
+2. **Explainable AI (XAI)**
+   - WHY was CVE identified?
+   - WHAT evidence supports it?
+   - HOW can it be exploited?
+   - WHAT is the impact?
+
+3. **Results include:**
+   ```json
+   {
+     "vulnerabilities": [...],
+     "xai_explanations": {
+       "CVE-2021-44228": {
+         "why_identified": "Apache version matches vulnerable range",
+         "evidence": "Service: Apache 2.4.6 on port 8080",
+         "attack_vector": "Remote code execution via Log4j",
+         "impact": "Full system compromise possible"
+       }
+     }
+   }
+   ```
+
+## 🔍 How to Use
+
+### 1. Go to Pentest Page
+```
+http://localhost:5000/pentest
+```
+
+### 2. Enter Target
+- Simulation: Any value (e.g., "demo.target.com")
+- Real mode: Authorized target only
+
+### 3. Watch Results
+- ✅ Progress bars (0% → 50% → 100%)
+- 📋 Live execution logs
+- 🔍 OSINT results
+- 🔎 Port scan results  
+- ⚠️ Vulnerabilities with AI explanations
 
 ## 📊 Workflow
 
 ```
-1. OSINT Intelligence
-   ↓ (saved to osint.json)
-2. Nmap Port Scan
-   ↓ (saved to nmap.json)  
-3. Vulnerability Analysis
-   ↓ (saved to vulnerabilities.json)
-4. Results Display
+🔍 OSINT Gathering (3s)
+   ↓ JSON saved
+🔎 Nmap Scanning (5s)
+   ↓ JSON saved
+🤖 AI CVE Analysis (4s)
+   ↓ JSON + XAI saved
+📋 Display Results
 ```
 
-## 🎨 UI Features
+## 🎯 Testing
 
-### Progress Bars
-Each agent shows 0-100% progress with color-coded status
+### Safe Simulation Test
+```bash
+# No tools needed
+python app.py
 
-### Live Logs
-Real-time execution logs with timestamps
+# Enter: test.example.com
+# Results appear in 12s
+```
 
-### Result Cards
-- 🔍 OSINT: DNS, Subdomains, SSL info
-- 🔎 Nmap: Open ports, Services
-- ⚠️ Vulnerabilities: CVE, CVSS, Severity
+### Real Tool Test
+```bash
+export SIMULATION_MODE="false"
+python app.py
 
-## 📝 License
+# Enter: scanme.nmap.org
+```
 
-Educational purposes only. Use responsibly.
+## 📁 Output Files
+
+Results saved to `reports/{chain_id}/`:
+
+```
+reports/
+└── abc123-def456/
+    ├── osint.json           # OSINT results
+    ├── nmap.json            # Port scan
+    └── ai_vulnerabilities.json  # AI analysis + XAI
+```
+
+## 🧠 AI Analysis Details
+
+### Without API Key (Fallback)
+- Pattern-based CVE matching
+- Basic severity assessment
+- Simple explanations
+
+### With API Key (CrewAI)
+- Multi-agent collaboration
+- Deep CVE research
+- Explainable reasoning
+- PoC availability check
+- Attack chain analysis
+
+## 🐛 Troubleshooting
+
+### No results showing?
+1. Check browser console (F12)
+2. Verify simulation mode: `export SIMULATION_MODE="true"`
+3. Check logs in terminal
+
+### AI analysis not working?
+1. Set API key: `export ANTHROPIC_API_KEY="..."`
+2. Install CrewAI: `pip install crewai langchain-anthropic`
+3. Check terminal for errors
+
+### Progress bars stuck?
+1. Refresh page
+2. Check `/api/attack-chain/{id}/status` response
+3. Look for errors in browser console
+
+## 📝 Example XAI Output
+
+```
+CVE-2021-44228 (Log4Shell)
+├── Why Identified: Apache Tomcat 9.0.30 uses vulnerable Log4j
+├── Evidence: Port 8080 running http-proxy service
+├── Attack Vector: Remote code execution via JNDI injection
+└── Impact: Complete system compromise
+
+Reasoning Chain:
+1. Detected Tomcat 9.0.30 on port 8080
+2. Tomcat versions use Log4j 2.x
+3. Log4j 2.x < 2.17.0 vulnerable to CVE-2021-44228
+4. Service publicly accessible → High exploitability
+5. RCE vulnerability → Critical severity
+```
+
+## ⚠️ Legal Notice
+
+**Educational purposes only**
+- Only scan authorized targets
+- Legal responsibility is yours
+- Not for malicious use
+
+## 🔗 Links
+
+- Documentation: `/FIXED_IMPLEMENTATION.md`
+- API Docs: `/api/attack-chain/create`
+- Issues: GitHub Issues
 
 ---
 
-**Version:** 2.0 (Automated Pentest Edition)
+**Version:** 3.0 (AI + Simulation Edition)
 **Last Updated:** 2025-09-21
+
+**🎉 Just `git pull` and `python app.py` to test!**
