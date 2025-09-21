@@ -46,12 +46,16 @@ git clone https://github.com/d01ki/BreachPilot.git
 cd BreachPilot
 git checkout feature/dev_v2
 
+# 古いファイルの削除（初回のみ）
+chmod +x cleanup.sh
+./cleanup.sh
+
 # 依存関係のインストール
 pip install -r requirements.txt
 
 # 環境変数の設定
 cp .env.example .env
-# .envファイルを編集してAPIキーを設定
+# .envファイルを編集してAPI キーを設定
 
 # Nmapのインストール（Ubuntu/Debian）
 sudo apt-get update
@@ -78,10 +82,10 @@ SHODAN_API_KEY=your_shodan_api_key_here  # オプション
 
 ```bash
 # サーバー起動
-python run.py
+python3 app.py
 
 # ブラウザで以下にアクセス
-http://localhost:8000/ui
+# http://localhost:8000/ui
 ```
 
 ### APIエンドポイント
@@ -107,7 +111,7 @@ curl -X POST http://localhost:8000/api/scan/{session_id}/poc
 # エクスプロイト承認
 curl -X POST http://localhost:8000/api/scan/{session_id}/approve \
   -H "Content-Type: application/json" \
-  -d '["CVE-2020-1472", "CVE-2021-44228"]'
+  -d '["CVE-XXXX-XXXX"]'
 
 # エクスプロイト実行
 curl -X POST http://localhost:8000/api/scan/{session_id}/exploit
@@ -139,7 +143,7 @@ analyst_result = orchestrator.run_analysis(session.session_id)
 poc_results = orchestrator.search_pocs(session.session_id)
 
 # エクスプロイト承認
-approved_cves = ["CVE-2020-1472"]
+approved_cves = ["CVE-XXXX-XXXX"]
 orchestrator.await_user_approval(session.session_id, approved_cves)
 
 # エクスプロイト実行
@@ -149,21 +153,21 @@ exploit_results = orchestrator.run_exploits(session.session_id)
 report = orchestrator.generate_report(session.session_id)
 ```
 
-## 🧪 Zerologon脆弱性のテスト
+## 🧪 テスト例
 
-VMware内のWindowsサーバー（CVE-2020-1472: Zerologon脆弱性）に対するテスト例：
+VMware内のWindowsサーバーに対するテスト：
 
 ```bash
 # Webインターフェースでターゲット入力
-# 例: 192.168.1.10 (VMware内のドメインコントローラー)
+# 例: 192.168.1.10 (VMware内のドメインコントローラ)
 
 # 各ステップを順次実行
 # 1. OSINT → ホスト名やドメイン情報を収集
 # 2. Nmap → ポート445、135などを検出
-# 3. Analysis → CVE-2020-1472を特定
-# 4. PoC Search → Zerologonエクスプロイトを検索
-# 5. 承認 → CVE-2020-1472を選択
-# 6. 実行 → Metasploitモジュールを使用して攻撃
+# 3. Analysis → 検出された脆弱性を特定
+# 4. PoC Search → エクスプロイトを検索
+# 5. 承認 → 実行するCVEを選択
+# 6. 実行 → サンドボックスで攻撃
 # 7. レポート → 結果をPDF/Markdownで出力
 ```
 
@@ -193,9 +197,10 @@ BreachPilot/
 │       └── app.js             # Vue.js アプリケーション
 ├── data/                      # JSON結果ファイル
 ├── reports/                   # 生成されたレポート
+├── app.py                     # メインエントリーポイント
 ├── requirements.txt
 ├── .env.example
-├── run.py                     # メインエントリーポイント
+├── cleanup.sh                 # クリーンアップスクリプト
 └── README.md
 ```
 
@@ -242,7 +247,7 @@ Metasploit Frameworkをインストールし、パスが正しく設定されて
 NmapのSYNスキャンにはroot権限が必要です：
 
 ```bash
-sudo python run.py
+sudo python3 app.py
 ```
 
 ## 🤝 貢献
