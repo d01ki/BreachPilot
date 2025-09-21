@@ -11,7 +11,7 @@
 <body class="bg-gray-100">
     <div id="app" class="container mx-auto px-4 py-8">
         <header class="mb-8">
-            <h1 class="text-4xl font-bold text-gray-800 mb-2">BreachPilot</h1>
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">🛡️ BreachPilot</h1>
             <p class="text-gray-600">Automated Penetration Testing System</p>
         </header>
 
@@ -22,201 +22,145 @@
                 <input 
                     v-model="targetIp" 
                     type="text" 
-                    placeholder="Enter target IP address"
+                    placeholder="Enter target IP (e.g., 192.168.1.100)"
                     class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     @keyup.enter="startScan"
                 >
                 <button 
                     @click="startScan"
                     :disabled="!targetIp || loading"
-                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                     {{ loading ? 'Starting...' : 'Start Scan' }}
                 </button>
             </div>
         </div>
 
-        <!-- Progress Steps -->
-        <div v-if="sessionId" class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 class="text-2xl font-semibold mb-4">Scan Progress</h2>
-            
-            <div class="space-y-4">
-                <!-- Step: OSINT -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('osint')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'osint' && loading">⏳</span>
-                        <span v-else-if="isStepComplete('osint')">✓</span>
-                        <span v-else>1</span>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">OSINT Collection</h3>
-                        <p class="text-sm text-gray-600">Gathering intelligence from public sources</p>
-                    </div>
+        <div v-if="sessionId">
+            <!-- Tabs -->
+            <div class="bg-white rounded-t-lg shadow-md">
+                <div class="flex border-b">
                     <button 
-                        v-if="!isStepComplete('osint') && currentStep === 'osint'"
-                        @click="runStep('osint')"
-                        :disabled="loading"
-                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                        @click="activeTab = 'progress'"
+                        :class="activeTab === 'progress' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
+                        class="px-6 py-3 font-semibold"
                     >
-                        Run OSINT
+                        Progress
+                    </button>
+                    <button 
+                        @click="activeTab = 'results'"
+                        :class="activeTab === 'results' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
+                        class="px-6 py-3 font-semibold"
+                    >
+                        Results
                     </button>
                 </div>
+            </div>
 
-                <!-- Step: Nmap -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('nmap')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'nmap' && loading">⏳</span>
-                        <span v-else-if="isStepComplete('nmap')">✓</span>
-                        <span v-else>2</span>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">Network Scanning</h3>
-                        <p class="text-sm text-gray-600">Discovering services and vulnerabilities</p>
-                    </div>
-                    <button 
-                        v-if="isStepComplete('osint') && !isStepComplete('nmap')"
-                        @click="runStep('nmap')"
-                        :disabled="loading"
-                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                    >
-                        Run Nmap
-                    </button>
-                </div>
-
-                <!-- Step: Analysis -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('analysis')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'analysis' && loading">⏳</span>
-                        <span v-else-if="isStepComplete('analysis')">✓</span>
-                        <span v-else>3</span>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">CVE Analysis</h3>
-                        <p class="text-sm text-gray-600">Identifying and explaining vulnerabilities</p>
-                    </div>
-                    <button 
-                        v-if="isStepComplete('nmap') && !isStepComplete('analysis')"
-                        @click="runStep('analyze')"
-                        :disabled="loading"
-                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                    >
-                        Analyze
-                    </button>
-                </div>
-
-                <!-- Step: PoC Search -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('poc')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'poc_search' && loading">⏳</span>
-                        <span v-else-if="pocsFound > 0">✓</span>
-                        <span v-else>4</span>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">PoC Search</h3>
-                        <p class="text-sm text-gray-600">Finding exploit code</p>
-                    </div>
-                    <button 
-                        v-if="isStepComplete('analysis') && pocsFound === 0"
-                        @click="runStep('poc')"
-                        :disabled="loading"
-                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                    >
-                        Search PoCs
-                    </button>
-                </div>
-
-                <!-- Step: Approval -->
-                <div v-if="pocResults.length > 0 && !exploitsApproved" class="border-t pt-4">
-                    <h3 class="font-semibold mb-2">Approve Exploits</h3>
-                    <div class="space-y-2">
-                        <div v-for="poc in pocResults" :key="poc.cve_id" class="flex items-center">
-                            <input 
-                                type="checkbox" 
-                                :value="poc.cve_id"
-                                v-model="approvedCves"
-                                class="mr-2"
-                            >
-                            <label>{{ poc.cve_id }} - {{ poc.selected_poc?.source || 'Unknown source' }}</label>
+            <!-- Progress Tab -->
+            <div v-show="activeTab === 'progress'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-semibold mb-4">Scan Progress</h2>
+                
+                <div class="space-y-4">
+                    <!-- OSINT -->
+                    <div class="flex items-center p-3 border rounded">
+                        <div :class="getStepClass('osint')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
+                            <span v-if="currentStep === 'osint' && loading">⏳</span>
+                            <span v-else-if="osintComplete">✓</span>
+                            <span v-else>1</span>
                         </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold">OSINT Collection</h3>
+                        </div>
+                        <button 
+                            v-if="!osintComplete && currentStep !== 'osint'"
+                            @click="runStep('osint')"
+                            :disabled="loading"
+                            class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+                        >
+                            Run
+                        </button>
                     </div>
-                    <button 
-                        @click="approveExploits"
-                        :disabled="approvedCves.length === 0 || loading"
-                        class="mt-4 px-6 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50"
-                    >
-                        Approve & Execute
-                    </button>
-                </div>
 
-                <!-- Step: Exploitation -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('exploitation')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'exploitation' && loading">⏳</span>
-                        <span v-else-if="exploitsRun > 0">✓</span>
-                        <span v-else>5</span>
+                    <!-- Nmap -->
+                    <div class="flex items-center p-3 border rounded">
+                        <div :class="getStepClass('nmap')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
+                            <span v-if="currentStep === 'nmap' && loading">⏳</span>
+                            <span v-else-if="nmapComplete">✓</span>
+                            <span v-else>2</span>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold">Nmap Scan</h3>
+                        </div>
+                        <button 
+                            v-if="osintComplete && !nmapComplete && currentStep !== 'nmap'"
+                            @click="runStep('nmap')"
+                            :disabled="loading"
+                            class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+                        >
+                            Run
+                        </button>
                     </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">Exploitation</h3>
-                        <p class="text-sm text-gray-600">Executing approved exploits</p>
-                    </div>
-                </div>
-
-                <!-- Step: Report -->
-                <div class="flex items-center">
-                    <div :class="getStepClass('reporting')" class="w-8 h-8 rounded-full flex items-center justify-center mr-4">
-                        <span v-if="currentStep === 'reporting' && loading">⏳</span>
-                        <span v-else-if="reportReady">✓</span>
-                        <span v-else>6</span>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold">Report Generation</h3>
-                        <p class="text-sm text-gray-600">Creating final report</p>
-                    </div>
-                    <button 
-                        v-if="exploitsRun > 0 && !reportReady"
-                        @click="generateReport"
-                        :disabled="loading"
-                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                    >
-                        Generate Report
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Results Display -->
-        <div v-if="sessionId" class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-2xl font-semibold mb-4">Results</h2>
-            
-            <div v-if="reportReady" class="space-y-4">
-                <div class="flex gap-4">
-                    <a 
-                        :href="`http://localhost:8000/api/scan/${sessionId}/download/report?format=pdf`"
-                        target="_blank"
-                        class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                        Download PDF Report
-                    </a>
-                    <a 
-                        :href="`http://localhost:8000/api/scan/${sessionId}/download/report?format=markdown`"
-                        target="_blank"
-                        class="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                    >
-                        Download Markdown
-                    </a>
                 </div>
             </div>
 
-            <div v-else class="text-gray-600">
-                Complete all steps to generate the final report.
+            <!-- Results Tab -->
+            <div v-show="activeTab === 'results'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-semibold mb-4">Scan Results</h2>
+                
+                <!-- OSINT Results -->
+                <div v-if="osintResult" class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">📡 OSINT Results</h3>
+                    <pre class="bg-gray-100 p-4 rounded overflow-auto max-h-96">{{ formatJson(osintResult) }}</pre>
+                </div>
+
+                <!-- Nmap Results -->
+                <div v-if="nmapResult" class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">🔍 Nmap Results</h3>
+                    <div class="bg-gray-100 p-4 rounded">
+                        <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0">
+                            <h4 class="font-semibold mb-2">Open Ports:</h4>
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-200">
+                                    <tr>
+                                        <th class="p-2 text-left">Port</th>
+                                        <th class="p-2 text-left">Service</th>
+                                        <th class="p-2 text-left">Product</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="port in nmapResult.open_ports" :key="port.port" class="border-t">
+                                        <td class="p-2">{{ port.port }}</td>
+                                        <td class="p-2">{{ port.service }}</td>
+                                        <td class="p-2">{{ port.product }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else class="text-gray-600">No open ports found</div>
+                    </div>
+                </div>
+
+                <!-- CVE Analysis -->
+                <div v-if="analystResult" class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">🔐 CVE Analysis</h3>
+                    <pre class="bg-gray-100 p-4 rounded overflow-auto max-h-96">{{ formatJson(analystResult) }}</pre>
+                </div>
+
+                <div v-if="!osintResult && !nmapResult && !analystResult" class="text-gray-600">
+                    No results yet. Run the scan steps to see results.
+                </div>
             </div>
 
-            <button 
-                @click="reset"
-                class="mt-6 px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-                Start New Scan
-            </button>
+            <!-- Reset Button -->
+            <div class="text-center">
+                <button 
+                    @click="reset"
+                    class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                    Start New Scan
+                </button>
+            </div>
         </div>
     </div>
 
