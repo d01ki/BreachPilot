@@ -21,6 +21,7 @@ class OSINTResult(BaseModel):
     hostname: Optional[str] = None
     domain: Optional[str] = None
     subdomains: List[str] = Field(default_factory=list)
+    dns_info: List[str] = Field(default_factory=list)
     whois_info: Optional[Dict[str, Any]] = None
     public_services: List[Dict[str, Any]] = Field(default_factory=list)
     shodan_data: Optional[Dict[str, Any]] = None
@@ -54,20 +55,29 @@ class AnalystResult(BaseModel):
     priority_vulnerabilities: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
 
+class PoCInfo(BaseModel):
+    source: str
+    url: str
+    description: str = ""
+    author: str = ""
+    stars: int = 0
+    code: str = ""
+
 class PoCResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     cve_id: str
-    poc_sources: List[Dict[str, str]] = Field(default_factory=list)
-    selected_poc: Optional[Dict[str, Any]] = None
+    available_pocs: List[PoCInfo] = Field(default_factory=list)
+    selected_poc: Optional[PoCInfo] = None
     status: StepStatus = StepStatus.PENDING
 
 class ExploitResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     cve_id: str
-    exploit_command: str = ""
+    target_ip: str = ""
+    exploit_used: str = ""
     execution_output: str = ""
     success: bool = False
-    evidence: List[str] = Field(default_factory=list)
+    artifacts_captured: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
 
 class ReportData(BaseModel):
