@@ -15,7 +15,6 @@
             <p class="text-gray-600">Automated Penetration Testing System</p>
         </header>
 
-        <!-- Target Input -->
         <div v-if="!sessionId" class="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 class="text-2xl font-semibold mb-4">Start New Scan</h2>
             <div class="flex gap-4">
@@ -37,7 +36,6 @@
         </div>
 
         <div v-if="sessionId">
-            <!-- Tabs -->
             <div class="bg-white rounded-t-lg shadow-md">
                 <div class="flex border-b">
                     <button 
@@ -57,12 +55,10 @@
                 </div>
             </div>
 
-            <!-- Progress Tab -->
             <div v-show="activeTab === 'progress'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
                 <h2 class="text-2xl font-semibold mb-4">Scan Progress</h2>
                 
                 <div class="space-y-4">
-                    <!-- OSINT -->
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('osint')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
                             <span v-if="currentStep === 'osint' && loading">⏳</span>
@@ -73,7 +69,7 @@
                             <h3 class="font-semibold">OSINT Collection</h3>
                         </div>
                         <button 
-                            v-if="!osintComplete && currentStep !== 'osint'"
+                            v-if="!osintComplete"
                             @click="runStep('osint')"
                             :disabled="loading"
                             class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
@@ -82,7 +78,6 @@
                         </button>
                     </div>
 
-                    <!-- Nmap -->
                     <div class="flex items-center p-3 border rounded">
                         <div :class="getStepClass('nmap')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
                             <span v-if="currentStep === 'nmap' && loading">⏳</span>
@@ -90,11 +85,49 @@
                             <span v-else>2</span>
                         </div>
                         <div class="flex-1">
-                            <h3 class="font-semibold">Nmap Scan</h3>
+                            <h3 class="font-semibold">Network Scan</h3>
                         </div>
                         <button 
-                            v-if="osintComplete && !nmapComplete && currentStep !== 'nmap'"
+                            v-if="osintComplete && !nmapComplete"
                             @click="runStep('nmap')"
+                            :disabled="loading"
+                            class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+                        >
+                            Run
+                        </button>
+                    </div>
+
+                    <div class="flex items-center p-3 border rounded">
+                        <div :class="getStepClass('analysis')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
+                            <span v-if="currentStep === 'analysis' && loading">⏳</span>
+                            <span v-else-if="analysisComplete">✓</span>
+                            <span v-else>3</span>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold">CVE Analysis</h3>
+                        </div>
+                        <button 
+                            v-if="nmapComplete && !analysisComplete"
+                            @click="runStep('analyze')"
+                            :disabled="loading"
+                            class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+                        >
+                            Run
+                        </button>
+                    </div>
+
+                    <div class="flex items-center p-3 border rounded">
+                        <div :class="getStepClass('poc')" class="w-10 h-10 rounded-full flex items-center justify-center mr-4">
+                            <span v-if="currentStep === 'poc_search' && loading">⏳</span>
+                            <span v-else-if="pocsFound > 0">✓</span>
+                            <span v-else>4</span>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold">PoC Search</h3>
+                        </div>
+                        <button 
+                            v-if="analysisComplete && pocsFound === 0"
+                            @click="runStep('poc')"
                             :disabled="loading"
                             class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
                         >
@@ -104,22 +137,25 @@
                 </div>
             </div>
 
-            <!-- Results Tab -->
             <div v-show="activeTab === 'results'" class="bg-white rounded-b-lg shadow-md p-6 mb-6">
                 <h2 class="text-2xl font-semibold mb-4">Scan Results</h2>
                 
-                <!-- OSINT Results -->
+                <div v-if="nmapResult?.os_detection?.is_domain_controller" class="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4">
+                    <h3 class="text-lg font-bold text-yellow-800">⚠️ Domain Controller Detected!</h3>
+                    <p class="text-yellow-700">Domain: {{ nmapResult.os_detection.dc_info?.domain }}</p>
+                    <p class="text-yellow-700">Site: {{ nmapResult.os_detection.dc_info?.site }}</p>
+                </div>
+
                 <div v-if="osintResult" class="mb-6">
                     <h3 class="text-xl font-semibold mb-3">📡 OSINT Results</h3>
                     <pre class="bg-gray-100 p-4 rounded overflow-auto max-h-96">{{ formatJson(osintResult) }}</pre>
                 </div>
 
-                <!-- Nmap Results -->
                 <div v-if="nmapResult" class="mb-6">
-                    <h3 class="text-xl font-semibold mb-3">🔍 Nmap Results</h3>
+                    <h3 class="text-xl font-semibold mb-3">🔍 Network Scan</h3>
                     <div class="bg-gray-100 p-4 rounded">
-                        <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0">
-                            <h4 class="font-semibold mb-2">Open Ports:</h4>
+                        <div v-if="nmapResult.open_ports?.length">
+                            <h4 class="font-semibold mb-2">Open Ports ({{ nmapResult.open_ports.length }}):</h4>
                             <table class="w-full text-sm">
                                 <thead class="bg-gray-200">
                                     <tr>
@@ -137,28 +173,25 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div v-else class="text-gray-600">No open ports found</div>
                     </div>
                 </div>
 
-                <!-- CVE Analysis -->
                 <div v-if="analystResult" class="mb-6">
                     <h3 class="text-xl font-semibold mb-3">🔐 CVE Analysis</h3>
                     <pre class="bg-gray-100 p-4 rounded overflow-auto max-h-96">{{ formatJson(analystResult) }}</pre>
                 </div>
 
-                <div v-if="!osintResult && !nmapResult && !analystResult" class="text-gray-600">
-                    No results yet. Run the scan steps to see results.
+                <div v-if="!osintResult && !nmapResult" class="text-gray-600">
+                    No results yet. Run the scan steps.
                 </div>
             </div>
 
-            <!-- Reset Button -->
             <div class="text-center">
                 <button 
                     @click="reset"
                     class="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
-                    Start New Scan
+                    New Scan
                 </button>
             </div>
         </div>
