@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -104,11 +104,11 @@ async def search_pocs(session_id: str) -> List[Dict[str, Any]]:
 
 
 @app.post("/api/scan/{session_id}/approve")
-async def approve_exploits(session_id: str, approved_cves: List[str]) -> Dict[str, str]:
+async def approve_exploits(session_id: str, approved_cves: List[str] = Body(...)) -> Dict[str, Any]:
     """Approve CVEs for exploitation"""
     try:
         orchestrator.await_user_approval(session_id, approved_cves)
-        return {"status": "approved", "cves": approved_cves}
+        return {"status": "approved", "cves": ",".join(approved_cves)}
     except Exception as e:
         logger.error(f"Approval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -156,6 +156,23 @@ async def get_status(session_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to get status: {e}")
         raise HTTPException(status_code=404, detail="Session not found")
+
+
+@app.get("/api/scan/{session_id}/results")
+async def get_results(session_id: str) -> Dict[str, Any]:
+    """Get all scan results"""
+    try:
+        session = orchestrator._get_session(session_id)
+        return {
+            "osint_result": session.osint_result.model_dump() if session.osint_result else None,
+            "nmap_result": session.nmap_result.model_dump() if session.nmap_result else None,
+            "analyst_result": session.analyst_result.model_dump() if session.analyst_result else None,
+            "poc_results": [p.model_dump() for p in session.poc_results] if session.poc_results else [],
+            "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else []
+        }
+    except Exception as e:
+        logger.error(f"Failed to get results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/scan/{session_id}/download/report")
