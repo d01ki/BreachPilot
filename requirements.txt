@@ -2,13 +2,10 @@
 flask
 python-dotenv
 
-# AI Agent framework
-crewai
-langchain-openai
-langchain-anthropic
+# AI dependencies - install separately if needed
+# crewai
+# langchain-openai
 
-# Optional: Real scanning tools (if not using mock)
+# Optional scanning tools
 dnspython
-python-whois
-pyOpenSSL
 requests
