@@ -1,7 +1,7 @@
 import json
+import re
 from typing import List, Dict, Any
 from crewai import Agent, Task, Crew, Process
-from crewai_tools import tool
 from langchain_openai import ChatOpenAI
 from backend.models import AnalystResult, CVEAnalysis, NmapResult, StepStatus
 from backend.config import config
@@ -137,8 +137,7 @@ class AnalystCrew:
         """Parse CVE analysis from crew output"""
         cves = []
         
-        # Simple parsing - in production, use more robust parsing
-        import re
+        # Simple parsing
         cve_pattern = r'CVE-\d{4}-\d{4,7}'
         found_cves = re.findall(cve_pattern, analysis_text)
         
@@ -177,7 +176,6 @@ class AnalystCrew:
     
     def _extract_description(self, text: str) -> str:
         """Extract vulnerability description"""
-        # Simple extraction - look for description patterns
         patterns = [
             r'Description:\s*(.+?)(?:\n|$)',
             r'allows\s+(.+?)(?:\.|\n)',
@@ -193,7 +191,6 @@ class AnalystCrew:
     
     def _extract_service(self, text: str) -> str:
         """Extract affected service"""
-        import re
         patterns = [
             r'affects?\s+([\w\s]+?)(?:version|\n)',
             r'in\s+([\w\s]+?)(?:version|\n)',
@@ -214,7 +211,6 @@ class AnalystCrew:
     
     def _extract_recommendation(self, text: str) -> str:
         """Extract mitigation recommendation"""
-        import re
         patterns = [
             r'Recommendation:\s*(.+?)(?:\n\n|$)',
             r'Mitigation:\s*(.+?)(?:\n\n|$)',
