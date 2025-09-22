@@ -1,347 +1,3 @@
-import subprocess
-import os
-import tempfile
-import shutil
-import requests
-from pathlib import Path
-from typing import Dict, Any, List
-import logging
-import re
-import json
-
-logger = logging.getLogger(__name__)
-
-class AutonomousGitPoCExecutor:
-    """Autonomous Git-based PoC executor with self-healing capabilities"""
-    
-    def __init__(self):
-        # Use configurable clone location with clear path structure
-        self.base_temp_dir = Path(tempfile.gettempdir()) / "breachpilot_autonomous"
-        self.clone_base = self.base_temp_dir / "repositories"
-        self.logs_dir = self.base_temp_dir / "logs"
-        
-        # Create directory structure
-        self.base_temp_dir.mkdir(exist_ok=True)
-        self.clone_base.mkdir(exist_ok=True)
-        self.logs_dir.mkdir(exist_ok=True)
-        
-        # Execution state tracking
-        self.execution_history = []
-        self.failed_attempts = []
-        self.adaptive_strategies = []
-        
-        logger.info(f"Autonomous PoC Executor initialized:")
-        logger.info(f"  Clone location: {self.clone_base}")
-        logger.info(f"  Logs location: {self.logs_dir}")
-    
-    def execute_github_poc_with_autonomy(self, github_url: str, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Execute PoC with autonomous error recovery and adaptation"""
-        try:
-            # Extract repository info
-            repo_info = self._extract_repo_info(github_url)
-            if not repo_info:
-                return {'success': False, 'output': 'Invalid GitHub URL', 'error': 'Invalid URL'}
-            
-            # Create dedicated clone directory for this repository
-            repo_clone_path = self.clone_base / f"{repo_info['owner']}_{repo_info['repo']}"
-            
-            logger.info(f"Starting autonomous execution for {repo_info['repo_name']}")
-            logger.info(f"Repository will be cloned to: {repo_clone_path}")
-            
-            # Autonomous execution with multiple strategies
-            result = self._autonomous_execution_loop(repo_info, repo_clone_path, target_ip, cve_id)
-            
-            # Save execution log
-            self._save_execution_log(repo_info, result)
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Autonomous PoC execution failed: {e}")
-            return {'success': False, 'output': f'Execution error: {str(e)}', 'error': str(e)}
-    
-    def _autonomous_execution_loop(self, repo_info: Dict, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Autonomous execution loop with self-healing and adaptation"""
-        max_attempts = 5
-        current_attempt = 0
-        
-        # Define execution strategies in order of preference
-        strategies = [
-            'standard_clone_and_execute',
-            'alternative_branch_strategy', 
-            'deep_file_discovery',
-            'adaptive_command_modification',
-            'fallback_raw_execution'
-        ]
-        
-        logger.info(f"Starting autonomous execution with {len(strategies)} strategies available")
-        
-        while current_attempt < max_attempts:
-            current_attempt += 1
-            strategy = strategies[min(current_attempt - 1, len(strategies) - 1)]
-            
-            logger.info(f"🤖 Autonomous attempt #{current_attempt}: {strategy}")
-            
-            try:
-                # Execute strategy
-                if strategy == 'standard_clone_and_execute':
-                    result = self._strategy_standard_clone(repo_info, clone_path, target_ip, cve_id)
-                elif strategy == 'alternative_branch_strategy':
-                    result = self._strategy_alternative_branches(repo_info, clone_path, target_ip, cve_id)
-                elif strategy == 'deep_file_discovery':
-                    result = self._strategy_deep_file_discovery(clone_path, target_ip, cve_id)
-                elif strategy == 'adaptive_command_modification':
-                    result = self._strategy_adaptive_commands(clone_path, target_ip, cve_id)
-                elif strategy == 'fallback_raw_execution':
-                    result = self._strategy_raw_file_execution(clone_path, target_ip, cve_id)
-                
-                # Record attempt
-                attempt_record = {
-                    'attempt': current_attempt,
-                    'strategy': strategy,
-                    'success': result.get('success', False),
-                    'error': result.get('error', ''),
-                    'output_length': len(result.get('output', '')),
-                    'return_code': result.get('return_code', -1)
-                }
-                self.execution_history.append(attempt_record)
-                
-                if result.get('success'):
-                    logger.info(f"✅ SUCCESS! Strategy '{strategy}' succeeded on attempt #{current_attempt}")
-                    result['autonomous_execution_info'] = {
-                        'successful_strategy': strategy,
-                        'attempts_needed': current_attempt,
-                        'clone_location': str(clone_path),
-                        'execution_history': self.execution_history
-                    }
-                    return result
-                else:
-                    logger.warning(f"❌ Strategy '{strategy}' failed: {result.get('error', 'Unknown error')}")
-                    
-                    # Analyze failure and adapt
-                    failure_analysis = self._analyze_failure(result)
-                    self.failed_attempts.append({
-                        'strategy': strategy,
-                        'error': result.get('error', ''),
-                        'analysis': failure_analysis,
-                        'attempt_number': current_attempt
-                    })
-                    
-                    # Adapt for next attempt
-                    self._adapt_next_strategy(result, strategy, failure_analysis)
-                    
-            except Exception as e:
-                logger.error(f"💥 Strategy '{strategy}' crashed: {e}")
-                self.failed_attempts.append({
-                    'strategy': strategy,
-                    'error': f"Strategy crashed: {str(e)}",
-                    'analysis': 'strategy_crash',
-                    'attempt_number': current_attempt
-                })
-        
-        # All strategies failed - return comprehensive failure report
-        logger.error(f"🚫 All {max_attempts} autonomous strategies exhausted")
-        return {
-            'success': False,
-            'output': self._generate_failure_report(),
-            'error': 'All autonomous strategies exhausted',
-            'autonomous_execution_info': {
-                'strategies_tried': [attempt['strategy'] for attempt in self.execution_history],
-                'total_attempts': max_attempts,
-                'clone_location': str(clone_path),
-                'execution_history': self.execution_history,
-                'failed_attempts': self.failed_attempts,
-                'adaptive_strategies': self.adaptive_strategies
-            }
-        }
-    
-    def _strategy_standard_clone(self, repo_info: Dict, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Strategy 1: Standard README-guided execution"""
-        logger.info("📋 Executing standard README-guided strategy")
-        
-        try:
-            # Clean clone if exists
-            if clone_path.exists():
-                logger.info("Removing existing clone directory")
-                shutil.rmtree(clone_path)
-            
-            # Clone repository
-            logger.info(f"Cloning {repo_info['clone_url']}")
-            clone_result = self._clone_repository(repo_info['clone_url'], clone_path)
-            if not clone_result['success']:
-                return clone_result
-            
-            # Analyze README for instructions
-            logger.info("Analyzing README.md for execution instructions")
-            readme_instructions = self._analyze_readme(clone_path, cve_id)
-            
-            # Install dependencies if specified
-            if readme_instructions.get('dependencies'):
-                logger.info(f"Installing {len(readme_instructions['dependencies'])} dependencies")
-                self._install_dependencies(clone_path, readme_instructions)
-            
-            # Execute based on README + file discovery
-            return self._execute_with_instructions(clone_path, target_ip, cve_id, readme_instructions)
-            
-        except Exception as e:
-            return {'success': False, 'output': f'Standard strategy failed: {str(e)}', 'error': str(e)}
-    
-    def _strategy_alternative_branches(self, repo_info: Dict, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Strategy 2: Try different repository branches"""
-        logger.info("🌿 Trying alternative branches strategy")
-        
-        try:
-            # Get available branches
-            branches = self._get_repository_branches(repo_info)
-            logger.info(f"Found {len(branches)} branches: {branches}")
-            
-            # Priority order for branches
-            priority_branches = ['main', 'master', 'develop', 'exploit', 'poc', 'vulnerability']
-            
-            # Sort branches by priority
-            sorted_branches = []
-            for priority in priority_branches:
-                if priority in branches:
-                    sorted_branches.append(priority)
-            
-            # Add remaining branches
-            for branch in branches:
-                if branch not in sorted_branches:
-                    sorted_branches.append(branch)
-            
-            # Try top 3 branches
-            for branch in sorted_branches[:3]:
-                logger.info(f"🌿 Trying branch: {branch}")
-                
-                try:
-                    # Clean and clone specific branch
-                    if clone_path.exists():
-                        shutil.rmtree(clone_path)
-                    
-                    clone_result = self._clone_repository_branch(repo_info['clone_url'], clone_path, branch)
-                    if clone_result['success']:
-                        readme_instructions = self._analyze_readme(clone_path, cve_id)
-                        self._install_dependencies(clone_path, readme_instructions)
-                        
-                        result = self._execute_with_instructions(clone_path, target_ip, cve_id, readme_instructions)
-                        if result['success']:
-                            result['successful_branch'] = branch
-                            return result
-                
-                except Exception as e:
-                    logger.debug(f"Branch {branch} failed: {e}")
-                    continue
-            
-            return {'success': False, 'output': f'All {len(sorted_branches[:3])} branches failed', 'error': 'No successful branch'}
-            
-        except Exception as e:
-            return {'success': False, 'output': f'Branch strategy failed: {str(e)}', 'error': str(e)}
-    
-    def _strategy_deep_file_discovery(self, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Strategy 3: Deep file analysis and discovery"""
-        logger.info("🔍 Executing deep file discovery strategy")
-        
-        try:
-            if not clone_path.exists():
-                return {'success': False, 'output': 'Repository not cloned', 'error': 'No repository'}
-            
-            # Comprehensive file analysis
-            candidate_files = self._deep_discover_executable_files(clone_path, cve_id)
-            logger.info(f"Discovered {len(candidate_files)} candidate files")
-            
-            if not candidate_files:
-                return {'success': False, 'output': 'No executable candidates found', 'error': 'No candidates'}
-            
-            # Try each candidate with multiple execution approaches
-            for i, file_info in enumerate(candidate_files[:5], 1):  # Limit to top 5
-                logger.info(f"🔍 Deep execution #{i}: {file_info['name']} (score: {file_info['score']})")
-                
-                result = self._execute_file_with_variations(file_info, target_ip, clone_path)
-                if result['success']:
-                    result['discovery_method'] = 'deep_file_discovery'
-                    result['file_score'] = file_info['score']
-                    return result
-            
-            return {'success': False, 'output': f'All {len(candidate_files)} discovered files failed', 'error': 'No successful execution'}
-            
-        except Exception as e:
-            return {'success': False, 'output': f'Deep discovery failed: {str(e)}', 'error': str(e)}
-    
-    def _strategy_adaptive_commands(self, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Strategy 4: Adaptive command modification"""
-        logger.info("🧠 Executing adaptive command strategy")
-        
-        try:
-            if not clone_path.exists():
-                return {'success': False, 'output': 'No repository', 'error': 'No repository'}
-            
-            # Get adaptive fixes based on previous failures
-            adaptive_fixes = self._get_adaptive_command_fixes()
-            logger.info(f"Trying {len(adaptive_fixes)} adaptive command modifications")
-            
-            # Find best candidate file
-            candidate_files = self._deep_discover_executable_files(clone_path, cve_id)
-            if not candidate_files:
-                return {'success': False, 'output': 'No files found', 'error': 'No files'}
-            
-            best_file = candidate_files[0]  # Highest scored file
-            logger.info(f"Using best candidate: {best_file['name']} (score: {best_file['score']})")
-            
-            # Try each adaptive fix
-            for i, fix in enumerate(adaptive_fixes, 1):
-                logger.info(f"🧠 Adaptive fix #{i}: {fix['description']}")
-                
-                result = self._execute_with_command_fix(best_file, target_ip, clone_path, fix)
-                if result['success']:
-                    result['adaptive_fix_used'] = fix['description']
-                    return result
-            
-            return {'success': False, 'output': 'All adaptive fixes failed', 'error': 'Adaptive fixes failed'}
-            
-        except Exception as e:
-            return {'success': False, 'output': f'Adaptive strategy failed: {str(e)}', 'error': str(e)}
-    
-    def _strategy_raw_file_execution(self, clone_path: Path, target_ip: str, cve_id: str) -> Dict[str, Any]:
-        """Strategy 5: Raw execution fallback"""
-        logger.info("⚡ Executing raw file execution strategy")
-        
-        try:
-            if not clone_path.exists():
-                return {'success': False, 'output': 'No repository', 'error': 'No repository'}
-            
-            # Find all potentially executable files
-            executable_files = []
-            for ext in ['.py', '.sh', '.pl', '.rb', '.c']:
-                files = list(clone_path.rglob(f'*{ext}'))
-                executable_files.extend(files)
-            
-            # Filter out obviously non-exploit files
-            filtered_files = []
-            skip_patterns = ['test', 'setup', 'readme', '__init__', 'example', 'demo']
-            
-            for file_path in executable_files:
-                if not any(skip in file_path.name.lower() for skip in skip_patterns):
-                    filtered_files.append(file_path)
-            
-            logger.info(f"Found {len(filtered_files)} raw executable files")
-            
-            if not filtered_files:
-                return {'success': False, 'output': 'No raw executable files', 'error': 'No executables'}
-            
-            # Try raw execution on each file
-            for i, file_path in enumerate(filtered_files[:10], 1):  # Limit to top 10
-                logger.info(f"⚡ Raw execution #{i}: {file_path.name}")
-                
-                result = self._raw_execute_file(file_path, target_ip, clone_path)
-                if result['success']:
-                    result['execution_method'] = 'raw_execution'
-                    return result
-            
-            return {'success': False, 'output': f'All {len(filtered_files)} raw executions failed', 'error': 'Raw execution failed'}
-            
-        except Exception as e:
-            return {'success': False, 'output': f'Raw execution strategy failed: {str(e)}', 'error': str(e)}
-    
     def _analyze_failure(self, result: Dict) -> str:
         """Analyze failure type for adaptive learning"""
         output = result.get('output', '').lower()
@@ -362,7 +18,7 @@ class AutonomousGitPoCExecutor:
             return 'timeout_error'
         elif 'connection' in full_text and ('refused' in full_text or 'failed' in full_text):
             return 'connection_error'
-        elif result.get('return_code') == 0 but len(output.strip()) < 10:
+        elif result.get('return_code') == 0 and len(output.strip()) < 10:  # Fixed syntax error
             return 'silent_failure'
         else:
             return 'unknown_error'
@@ -465,7 +121,6 @@ class AutonomousGitPoCExecutor:
         except Exception as e:
             logger.warning(f"Cleanup failed: {e}")
     
-    # Include helper methods (shortened for space - continuing with key methods)
     def _extract_repo_info(self, github_url: str) -> Dict[str, str]:
         """Extract repository information from GitHub URL"""
         try:
@@ -527,6 +182,352 @@ class AutonomousGitPoCExecutor:
         except Exception as e:
             logger.debug(f"Failed to get branches: {e}")
         return ['main', 'master']
+    
+    def _analyze_readme(self, repo_path: Path, cve_id: str) -> Dict[str, Any]:
+        """Analyze README.md for execution instructions"""
+        instructions = {
+            'execution_commands': [],
+            'main_files': [],
+            'dependencies': [],
+            'usage_examples': []
+        }
+        
+        try:
+            readme_files = []
+            for pattern in ['README.md', 'readme.md', 'README.txt', 'README.rst', 'README']:
+                readme_path = repo_path / pattern
+                if readme_path.exists():
+                    readme_files.append(readme_path)
+            
+            for readme_path in readme_files:
+                with open(readme_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                
+                self._extract_commands_from_readme(content, instructions, cve_id)
+                self._extract_main_files_from_readme(content, instructions, cve_id)
+                self._extract_dependencies_from_readme(content, instructions)
+                
+                break
+            
+        except Exception as e:
+            logger.warning(f"Error analyzing README: {e}")
+        
+        return instructions
+    
+    def _extract_commands_from_readme(self, content: str, instructions: Dict, cve_id: str):
+        """Extract execution commands from README content"""
+        code_blocks = re.findall(r'```(?:python|bash|sh)?\n(.*?)```', content, re.DOTALL)
+        
+        for block in code_blocks:
+            lines = block.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                
+                if line.startswith('python') and any(keyword in line.lower() for keyword in [cve_id.lower(), 'exploit', 'poc', '.py']):
+                    instructions['execution_commands'].append({
+                        'command': line,
+                        'type': 'python',
+                        'priority': 10
+                    })
+                elif line.startswith('./') and any(ext in line for ext in ['.py', '.sh']):
+                    instructions['execution_commands'].append({
+                        'command': line,
+                        'type': 'direct',
+                        'priority': 8
+                    })
+        
+        inline_commands = re.findall(r'`([^`]*(?:python|\.py|exploit)[^`]*)`', content, re.IGNORECASE)
+        for cmd in inline_commands:
+            if any(keyword in cmd.lower() for keyword in [cve_id.lower(), 'exploit', 'poc']):
+                instructions['execution_commands'].append({
+                    'command': cmd.strip(),
+                    'type': 'inline',
+                    'priority': 6
+                })
+    
+    def _extract_main_files_from_readme(self, content: str, instructions: Dict, cve_id: str):
+        """Extract main executable files mentioned in README"""
+        file_patterns = [
+            rf'({cve_id.lower()}[.\w]*\.py)',
+            rf'(exploit[.\w]*\.py)',
+            rf'(poc[.\w]*\.py)',
+            rf'([.\w]*{cve_id.lower()}[.\w]*)',
+            rf'([.\w]*exploit[.\w]*\.py)',
+            rf'([.\w]*poc[.\w]*\.py)'
+        ]
+        
+        for pattern in file_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                if match and match.endswith(('.py', '.sh', '.rb', '.pl')):
+                    instructions['main_files'].append(match)
+    
+    def _extract_dependencies_from_readme(self, content: str, instructions: Dict):
+        """Extract dependencies from README"""
+        pip_installs = re.findall(r'pip install ([^\n]+)', content)
+        instructions['dependencies'].extend(pip_installs)
+        
+        if 'requirements.txt' in content:
+            instructions['dependencies'].append('requirements.txt')
+    
+    def _install_dependencies(self, repo_path: Path, readme_instructions: Dict):
+        """Install dependencies if specified"""
+        try:
+            # Install from requirements.txt if exists
+            requirements_file = repo_path / 'requirements.txt'
+            if requirements_file.exists():
+                logger.info("Installing dependencies from requirements.txt")
+                subprocess.run(['pip', 'install', '-r', str(requirements_file)], 
+                             capture_output=True, timeout=120)
+            
+            # Install individual dependencies
+            for dep in readme_instructions.get('dependencies', []):
+                if dep != 'requirements.txt':
+                    logger.info(f"Installing dependency: {dep}")
+                    subprocess.run(['pip', 'install', dep], 
+                                 capture_output=True, timeout=60)
+                    
+        except Exception as e:
+            logger.warning(f"Failed to install dependencies: {e}")
+    
+    def _execute_with_instructions(self, repo_path: Path, target_ip: str, cve_id: str, readme_instructions: Dict) -> Dict[str, Any]:
+        """Execute PoC with README instructions"""
+        try:
+            # Create execution plan based on README + file discovery
+            execution_plan = self._create_execution_plan(repo_path, cve_id, readme_instructions)
+            
+            if not execution_plan:
+                return {'success': False, 'output': 'No executable PoC files found', 'error': 'No PoC files'}
+            
+            # Try executing each target until success
+            for i, target in enumerate(execution_plan, 1):
+                logger.info(f"Attempting execution #{i}: {target['description']}")
+                
+                result = self._execute_target(target, target_ip, repo_path)
+                
+                if result['success']:
+                    logger.info(f"✓ Execution #{i} succeeded!")
+                    result['executed_target'] = target
+                    return result
+                else:
+                    logger.warning(f"✗ Execution #{i} failed: {result.get('error', 'Unknown error')}")
+            
+            return {
+                'success': False,
+                'output': f'All {len(execution_plan)} execution attempts failed',
+                'error': 'All executions failed'
+            }
+            
+        except Exception as e:
+            return {'success': False, 'output': f'Execution error: {str(e)}', 'error': str(e)}
+    
+    def _create_execution_plan(self, repo_path: Path, cve_id: str, readme_instructions: Dict) -> List[Dict]:
+        """Create intelligent execution plan"""
+        execution_plan = []
+        
+        # Priority 1: Commands from README
+        for cmd_info in readme_instructions.get('execution_commands', []):
+            command = cmd_info['command']
+            
+            if command.startswith('python'):
+                parts = command.split()
+                if len(parts) > 1:
+                    file_path = repo_path / parts[1]
+                    if file_path.exists():
+                        execution_plan.append({
+                            'type': 'readme_command',
+                            'file_path': file_path,
+                            'command_template': command,
+                            'description': f"README command: {command}",
+                            'priority': cmd_info['priority']
+                        })
+        
+        # Priority 2: Main files mentioned in README
+        for filename in readme_instructions.get('main_files', []):
+            file_path = repo_path / filename
+            if file_path.exists():
+                execution_plan.append({
+                    'type': 'readme_file',
+                    'file_path': file_path,
+                    'description': f"README mentioned file: {filename}",
+                    'priority': 8
+                })
+        
+        # Priority 3: Auto-discovered files
+        discovered_files = self._deep_discover_executable_files(repo_path, cve_id)
+        for file_info in discovered_files:
+            execution_plan.append({
+                'type': 'discovered',
+                'file_path': file_info['path'],
+                'description': f"Discovered file: {file_info['name']} (score: {file_info['score']})",
+                'priority': file_info['score'] // 10
+            })
+        
+        # Sort by priority and remove duplicates
+        execution_plan.sort(key=lambda x: x['priority'], reverse=True)
+        
+        seen_files = set()
+        unique_plan = []
+        for target in execution_plan:
+            file_str = str(target['file_path'])
+            if file_str not in seen_files:
+                seen_files.add(file_str)
+                unique_plan.append(target)
+        
+        return unique_plan[:5]
+    
+    def _deep_discover_executable_files(self, repo_path: Path, cve_id: str) -> List[Dict]:
+        """Discover PoC files automatically"""
+        poc_files = []
+        
+        try:
+            extensions = ['.py', '.sh', '.rb', '.pl', '.c', '.cpp', '.go', '.java']
+            
+            search_patterns = [
+                cve_id.lower(),
+                cve_id.replace('-', '_').lower(),
+                cve_id.replace('CVE-', '').replace('cve-', ''),
+                'exploit',
+                'poc',
+                'attack',
+                'payload'
+            ]
+            
+            for file_path in repo_path.rglob('*'):
+                if file_path.is_file() and file_path.suffix.lower() in extensions:
+                    file_name = file_path.name.lower()
+                    
+                    score = 0
+                    
+                    for i, pattern in enumerate(search_patterns):
+                        if pattern in file_name:
+                            score += (len(search_patterns) - i) * 15
+                    
+                    if file_path.suffix.lower() in ['.py', '.sh']:
+                        score += 10
+                    
+                    if file_path.parent == repo_path:
+                        score += 20
+                    
+                    if any(exclude in file_name for exclude in ['readme', 'license', 'makefile', 'dockerfile', 'requirements']):
+                        score -= 30
+                    
+                    if score > 0:
+                        poc_files.append({
+                            'path': file_path,
+                            'name': file_path.name,
+                            'score': score
+                        })
+            
+            poc_files.sort(key=lambda x: x['score'], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error discovering PoC files: {e}")
+        
+        return poc_files
+    
+    def _execute_target(self, target: Dict, target_ip: str, repo_path: Path) -> Dict[str, Any]:
+        """Execute a specific target"""
+        try:
+            file_path = target['file_path']
+            extension = file_path.suffix.lower()
+            
+            if extension in ['.sh', '.py', '.rb', '.pl']:
+                os.chmod(file_path, 0o755)
+            
+            if target['type'] == 'readme_command' and 'command_template' in target:
+                cmd_template = target['command_template']
+                cmd_parts = cmd_template.split()
+                
+                if target_ip not in cmd_template:
+                    cmd_parts.append(target_ip)
+                
+                cmd = cmd_parts
+            else:
+                if extension == '.py':
+                    cmd = ['python3', str(file_path), target_ip]
+                elif extension == '.sh':
+                    cmd = ['bash', str(file_path), target_ip]
+                elif extension == '.rb':
+                    cmd = ['ruby', str(file_path), target_ip]
+                elif extension == '.pl':
+                    cmd = ['perl', str(file_path), target_ip]
+                else:
+                    cmd = [str(file_path), target_ip]
+            
+            logger.info(f"Executing: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=repo_path,
+                env=self._get_secure_env()
+            )
+            
+            output = result.stdout + result.stderr
+            success = self._analyze_execution_success(output, result.returncode)
+            
+            return {
+                'success': success,
+                'output': output,
+                'error': result.stderr if not success else None,
+                'return_code': result.returncode,
+                'command': ' '.join(cmd),
+                'file_executed': str(file_path)
+            }
+            
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'output': f'Execution of {file_path.name} timed out after 120 seconds',
+                'error': 'Timeout',
+                'return_code': -1
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'output': f'Execution error: {str(e)}',
+                'error': str(e),
+                'return_code': -1
+            }
+    
+    def _get_secure_env(self) -> Dict[str, str]:
+        """Get secure environment variables"""
+        return {
+            'PATH': '/usr/local/bin:/usr/bin:/bin',
+            'HOME': '/tmp',
+            'LANG': 'C.UTF-8',
+            'LC_ALL': 'C.UTF-8'
+        }
+    
+    def _analyze_execution_success(self, output: str, return_code: int) -> bool:
+        """Analyze if execution was successful"""
+        output_lower = output.lower()
+        
+        success_indicators = [
+            'exploit successful', 'successfully exploited', 'shell obtained',
+            'access granted', 'vulnerability confirmed', 'target vulnerable',
+            'privilege escalation', 'authentication bypassed', 'exploit completed'
+        ]
+        
+        failure_indicators = [
+            'failed', 'error', 'exception', 'not vulnerable',
+            'access denied', 'connection refused', 'timeout',
+            'syntaxerror', 'traceback'
+        ]
+        
+        if any(indicator in output_lower for indicator in success_indicators):
+            return True
+        
+        if any(indicator in output_lower for indicator in failure_indicators):
+            return False
+        
+        if return_code == 0 and len(output.strip()) > 20:
+            return True
+        
+        return False
     
     def __del__(self):
         """Ensure cleanup on destruction"""
