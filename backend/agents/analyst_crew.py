@@ -34,7 +34,7 @@ class AnalystCrew:
                 backstory="""You are an expert security analyst specializing in CVE identification 
                 and vulnerability assessment. You analyze scan results to identify known CVEs.""",
                 llm=self.llm,
-                verbose=True
+                verbose=False  # Reduced verbosity
             )
             
             scan_context = self._prepare_scan_context(nmap_result)
@@ -83,7 +83,7 @@ class AnalystCrew:
                 agents=[cve_analyst],
                 tasks=[identify_task],
                 process=Process.sequential,
-                verbose=True
+                verbose=False  # Reduced verbosity
             )
             
             crew_result = crew.kickoff()
@@ -92,7 +92,7 @@ class AnalystCrew:
             result.priority_vulnerabilities = self._prioritize_vulnerabilities(result.identified_cves)
             result.status = StepStatus.COMPLETED
             
-            logger.info(f"Analysis completed for {target_ip}")
+            logger.info(f"Analysis completed: {len(result.identified_cves)} CVEs identified")
             
         except Exception as e:
             logger.error(f"Vulnerability analysis failed: {e}")
@@ -118,14 +118,13 @@ class AnalystCrew:
         # Check if CVE-2020-1472 should be forced based on scan results
         should_force_zerologon = self._should_force_zerologon(nmap_result)
         if should_force_zerologon and 'CVE-2020-1472' not in found_cves:
-            logger.warning("CVE-2020-1472 not found in analysis, but conditions suggest it should be present. Adding it.")
+            logger.info("Adding CVE-2020-1472 based on Domain Controller detection")
             found_cves.append('CVE-2020-1472')
         
         for cve_id in set(found_cves):
-            logger.info(f"Enriching {cve_id} with NVD data...")
             cve_section = self._extract_cve_section(analysis_text, cve_id)
             
-            # Get CVSS score from NVD
+            # Get CVSS score from NVD (with rate limiting)
             cvss_score = self._get_cvss_from_nvd(cve_id)
             
             # Special handling for CVE-2020-1472
@@ -143,15 +142,14 @@ class AnalystCrew:
                     cve_links=self._get_cve_links(cve_id)
                 )
             cves.append(cve)
-            logger.info(f"  {cve_id}: CVSS {cve.cvss_score}")
         
         return cves
     
     def _get_cvss_from_nvd(self, cve_id: str) -> float:
-        """Get CVSS score from NVD API"""
+        """Get CVSS score from NVD API with rate limiting"""
         try:
             url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=8)
             
             if response.status_code == 200:
                 data = response.json()
@@ -160,21 +158,16 @@ class AnalystCrew:
                     cve_data = vuln.get('cve', {})
                     metrics = cve_data.get('metrics', {})
                     
-                    # Try CVSS v3.1 first
-                    if 'cvssMetricV31' in metrics:
-                        return metrics['cvssMetricV31'][0]['cvssData']['baseScore']
-                    # Then CVSS v3.0
-                    elif 'cvssMetricV30' in metrics:
-                        return metrics['cvssMetricV30'][0]['cvssData']['baseScore']
-                    # Finally CVSS v2
-                    elif 'cvssMetricV2' in metrics:
-                        return metrics['cvssMetricV2'][0]['cvssData']['baseScore']
+                    # Try CVSS v3.1 first, then v3.0, then v2
+                    for version in ['cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2']:
+                        if version in metrics:
+                            return metrics[version][0]['cvssData']['baseScore']
             
-            # Rate limiting
-            time.sleep(0.6)  # NVD allows ~1 req/sec
+            # Rate limiting for NVD API
+            time.sleep(0.7)  # Slightly more conservative rate limiting
             
         except Exception as e:
-            logger.warning(f"Failed to get CVSS for {cve_id}: {e}")
+            logger.debug(f"Failed to get CVSS for {cve_id}: {e}")
         
         return None
     
@@ -183,7 +176,7 @@ class AnalystCrew:
         section = []
         capturing = False
         
-        for i, line in enumerate(lines):
+        for line in lines:
             if cve_id in line:
                 capturing = True
             elif capturing and 'CVE-' in line and cve_id not in line:
@@ -196,8 +189,8 @@ class AnalystCrew:
     def _extract_description(self, text: str) -> str:
         patterns = [
             r'Description:\s*(.+?)(?:\n|$)',
-            r'allows\s+(.+?)(?:\.|\n)',
-            r'vulnerability\s+(.+?)(?:\.|\n)'
+            r'allows\s+(.+?)(?:\.|n)',
+            r'vulnerability\s+(.+?)(?:\.|n)'
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -225,7 +218,7 @@ class AnalystCrew:
         patterns = [
             r'Recommendation:\s*(.+?)(?:\n\n|$)',
             r'Mitigation:\s*(.+?)(?:\n\n|$)',
-            r'(?:patch|update|upgrade)\s+(.+?)(?:\.|\n)'
+            r'(?:patch|update|upgrade)\s+(.+?)(?:\.|n)'
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
@@ -297,8 +290,6 @@ class AnalystCrew:
             for service in nmap_result.services
         )
         
-        logger.info(f"Zerologon conditions: DC={is_dc}, Port445={has_port_445}, Windows={has_windows_services}, AD={has_ad_services}")
-        
         return (is_dc and has_port_445) or (has_windows_services and has_port_445 and has_ad_services)
     
     def _create_zerologon_cve(self, nmap_result: NmapResult) -> CVEAnalysis:
@@ -361,4 +352,4 @@ CVE-2020-1472, also known as Zerologon, is a critical vulnerability in the Micro
         output_file = config.DATA_DIR / f"{target_ip}_analyst.json"
         with open(output_file, 'w') as f:
             json.dump(result.model_dump(), f, indent=2, default=str)
-        logger.info(f"Analysis result saved to {output_file}")
+        logger.debug(f"Analysis result saved to {output_file}")
