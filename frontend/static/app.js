@@ -67,21 +67,32 @@ createApp({
                     limit: parseInt(this.pocLimit)
                 };
                 
-                console.log('Searching PoCs with payload:', payload);
+                console.log('🔍 Searching PoCs with payload:', payload);
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`, payload);
-                this.pocResults = res.data;
                 
-                console.log('PoC search completed:', this.pocResults);
+                console.log('🎯 PoC search raw response:', res.data);
                 
-                // Log summary
-                const totalPocs = this.getTotalPoCs();
-                const githubRepos = this.getGitHubRepos();
-                console.log(`PoC Search Summary: ${totalPocs} total PoCs, ${githubRepos} GitHub repositories`);
+                // Verify data structure
+                if (Array.isArray(res.data)) {
+                    this.pocResults = res.data;
+                    console.log('✅ PoC Results set:', this.pocResults);
+                    
+                    // Log summary
+                    const totalPocs = this.getTotalPoCs();
+                    const githubRepos = this.getGitHubRepos();
+                    console.log(`📊 PoC Summary: ${totalPocs} total PoCs, ${githubRepos} GitHub repositories`);
+                    
+                    // Force UI update
+                    this.$forceUpdate();
+                } else {
+                    console.error('❌ Unexpected response format:', res.data);
+                    this.pocResults = [];
+                }
                 
                 this.currentStep = '';
             } catch (error) {
-                console.error('PoC search failed:', error);
+                console.error('❌ PoC search failed:', error);
                 this.currentStep = '';
                 alert('PoC search failed: ' + (error.response?.data?.detail || error.message));
             }
@@ -96,7 +107,7 @@ createApp({
             this.executingPocs.add(pocKey);
             
             try {
-                console.log(`Executing single PoC via git clone: ${cveId} #${pocIndex}`);
+                console.log(`🚀 Executing single PoC via git clone: ${cveId} #${pocIndex}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -106,7 +117,7 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/by_index`, payload);
                 
-                console.log(`Git clone execution result:`, res.data);
+                console.log(`🎯 Git clone execution result:`, res.data);
                 
                 this.updateExploitResult(res.data);
                 
@@ -117,7 +128,7 @@ createApp({
                 }
                 
             } catch (error) {
-                console.error(`PoC execution failed:`, error);
+                console.error(`❌ PoC execution failed:`, error);
                 this.showNotification(`❌ PoC execution failed: ${error.response?.data?.detail || error.message}`, 'error');
             } finally {
                 this.executingPocs.delete(pocKey);
@@ -126,7 +137,7 @@ createApp({
         
         async executeAllPocs(cveId) {
             try {
-                console.log(`Executing all PoCs via git clone for: ${cveId}`);
+                console.log(`🚀 Executing all PoCs via git clone for: ${cveId}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -135,7 +146,7 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/multi`, payload);
                 
-                console.log(`Multi-PoC git clone execution results:`, res.data);
+                console.log(`🎯 Multi-PoC git clone execution results:`, res.data);
                 
                 res.data.forEach(result => this.updateExploitResult(result));
                 
@@ -144,7 +155,7 @@ createApp({
                 this.showNotification(message, successful > 0 ? 'success' : 'error');
                 
             } catch (error) {
-                console.error(`Multi-PoC execution failed:`, error);
+                console.error(`❌ Multi-PoC execution failed:`, error);
                 this.showNotification(`❌ Multi-PoC execution failed: ${error.response?.data?.detail || error.message}`, 'error');
             }
         },
@@ -271,6 +282,8 @@ createApp({
                 const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
                 const r = res.data;
                 
+                console.log('📡 Loading results:', r);
+                
                 if (r.osint_result && !this.osintComplete) {
                     this.osintResult = r.osint_result;
                     this.osintComplete = true;
@@ -284,7 +297,12 @@ createApp({
                     this.analysisComplete = true;
                 }
                 if (r.poc_results) {
-                    if (!this.pocSearchStarted || JSON.stringify(r.poc_results) !== JSON.stringify(this.pocResults)) {
+                    // Check if poc results have changed
+                    const currentPocData = JSON.stringify(this.pocResults);
+                    const newPocData = JSON.stringify(r.poc_results);
+                    
+                    if (currentPocData !== newPocData) {
+                        console.log('🔄 PoC results updated:', r.poc_results);
                         this.pocResults = r.poc_results;
                         if (r.poc_results.length > 0) {
                             this.pocSearchStarted = true;
@@ -353,6 +371,23 @@ createApp({
             if (risk === 'HIGH') return 'bg-red-600';
             if (risk === 'MED') return 'bg-yellow-500';
             return 'bg-green-500';
+        },
+        
+        // Debug method to inspect PoC data
+        inspectPocData() {
+            console.log('🐛 Debug - Current PoC Results:');
+            console.log('pocResults length:', this.pocResults.length);
+            console.log('pocSearchStarted:', this.pocSearchStarted);
+            console.log('pocResults data:', this.pocResults);
+            
+            this.pocResults.forEach((result, index) => {
+                console.log(`CVE ${index + 1}:`, result.cve_id);
+                console.log(`  PoCs available:`, result.available_pocs.length);
+                console.log(`  Status:`, result.status);
+                result.available_pocs.forEach((poc, pocIndex) => {
+                    console.log(`    PoC ${pocIndex + 1}: ${poc.source} - ${poc.url}`);
+                });
+            });
         }
     },
     
@@ -381,6 +416,7 @@ createApp({
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('debug') === 'true') {
             this.debugMode = true;
+            console.log('🐛 Debug mode enabled');
         }
         
         const sessionFromUrl = urlParams.get('session');
@@ -388,6 +424,12 @@ createApp({
             this.sessionId = sessionFromUrl;
             this.startPolling();
             this.loadResults();
+        }
+        
+        // Add debug button if in debug mode
+        if (this.debugMode) {
+            window.inspectPocData = this.inspectPocData;
+            console.log('🐛 Debug commands available: inspectPocData()');
         }
     }
 }).mount('#app');
