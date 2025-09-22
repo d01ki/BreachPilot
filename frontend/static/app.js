@@ -12,6 +12,8 @@ createApp({
             expandedCves: {}, expandedCode: {}, expandedOutputs: {},
             debugMode: false, showRawOutput: false,
             executingPocs: new Set(),
+            aiAgentStatus: 'Idle',  // Track AI agent status
+            pocSearchProgress: '',  // Track search progress
         }
     },
     methods: {
@@ -32,10 +34,10 @@ createApp({
             this.currentStep = step;
             try {
                 const url = `${API_URL}/api/scan/${this.sessionId}/${step === 'analyze' ? 'analyze' : step}`;
-                console.log(`Running step: ${step}, URL: ${url}`);
+                console.log(`🚀 Running ${step} with AI agents...`);
                 
                 const res = await axios.post(url);
-                console.log(`Step ${step} response:`, res.data);
+                console.log(`✅ ${step} completed:`, res.data);
                 
                 if (step === 'osint') { 
                     this.osintResult = res.data; 
@@ -48,12 +50,13 @@ createApp({
                 if (step === 'analyze') { 
                     this.analystResult = res.data; 
                     this.analysisComplete = true;
+                    console.log(`📊 CVE Analysis found ${this.analystResult?.identified_cves?.length || 0} vulnerabilities`);
                 }
                 this.currentStep = '';
             } catch (error) {
-                console.error(`Step ${step} failed:`, error);
+                console.error(`❌ ${step} failed:`, error);
                 this.currentStep = '';
-                alert(`Step ${step} failed: ` + (error.response?.data?.detail || error.message));
+                alert(`${step} failed: ` + (error.response?.data?.detail || error.message));
             }
         },
         
@@ -61,53 +64,69 @@ createApp({
             try {
                 this.pocSearchStarted = true;
                 this.currentStep = 'poc_search';
+                this.aiAgentStatus = 'Initializing AI Agents...';
+                this.pocSearchProgress = 'Starting AI-powered PoC search...';
                 
                 const payload = {
                     selected_cves: this.selectedCves,
                     limit: parseInt(this.pocLimit)
                 };
                 
-                console.log('🔍 Searching PoCs with payload:', payload);
+                console.log('🤖 Starting AI-enhanced PoC search:', payload);
+                
+                // Set progress updates
+                const progressMessages = [
+                    '🔍 AI agents analyzing CVE patterns...',
+                    '🎯 Searching GitHub repositories...',
+                    '📊 Evaluating PoC quality...',
+                    '🤖 AI agents ranking exploits...',
+                    '✅ Finalizing search results...'
+                ];
+                
+                let progressIndex = 0;
+                const progressInterval = setInterval(() => {
+                    if (progressIndex < progressMessages.length) {
+                        this.pocSearchProgress = progressMessages[progressIndex];
+                        progressIndex++;
+                    }
+                }, 3000);
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`, payload);
                 
-                console.log('🎯 PoC search raw response:', res.data);
+                clearInterval(progressInterval);
                 
-                // Verify data structure
+                console.log('🎯 AI-enhanced PoC search results:', res.data);
+                
                 if (Array.isArray(res.data)) {
                     this.pocResults = res.data;
-                    console.log('✅ PoC Results set:', this.pocResults);
-                    
-                    // Log summary
-                    const totalPocs = this.getTotalPoCs();
-                    const githubRepos = this.getGitHubRepos();
-                    console.log(`📊 PoC Summary: ${totalPocs} total PoCs, ${githubRepos} GitHub repositories`);
+                    this.aiAgentStatus = `✅ Found ${this.getTotalPoCs()} PoCs`;
+                    this.pocSearchProgress = `Search complete! Found ${this.getGitHubRepos()} GitHub repositories`;
                     
                     // Force UI update
                     this.$forceUpdate();
                 } else {
                     console.error('❌ Unexpected response format:', res.data);
                     this.pocResults = [];
+                    this.aiAgentStatus = '❌ Search failed';
                 }
                 
                 this.currentStep = '';
             } catch (error) {
-                console.error('❌ PoC search failed:', error);
+                console.error('❌ AI PoC search failed:', error);
                 this.currentStep = '';
-                alert('PoC search failed: ' + (error.response?.data?.detail || error.message));
+                this.aiAgentStatus = '❌ AI agents error';
+                this.pocSearchProgress = 'Search failed: ' + (error.response?.data?.detail || error.message);
             }
         },
         
         async executeSinglePoc(cveId, pocIndex) {
             const pocKey = `${cveId}_${pocIndex}`;
-            if (this.executingPocs.has(pocKey)) {
-                return;
-            }
+            if (this.executingPocs.has(pocKey)) return;
             
             this.executingPocs.add(pocKey);
             
             try {
-                console.log(`🚀 Executing single PoC via git clone: ${cveId} #${pocIndex}`);
+                console.log(`🚀 Executing PoC via AI-enhanced git clone: ${cveId} #${pocIndex}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -117,12 +136,13 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/by_index`, payload);
                 
-                console.log(`🎯 Git clone execution result:`, res.data);
+                console.log(`🎯 Exploit execution result:`, res.data);
                 
                 this.updateExploitResult(res.data);
                 
                 if (res.data.success) {
-                    this.showNotification(`✅ ${cveId} PoC #${pocIndex + 1} executed successfully via git clone!`, 'success');
+                    this.showNotification(`✅ ${cveId} PoC #${pocIndex + 1} executed successfully!`, 'success');
+                    this.createSuccessEffect(cveId, pocIndex);
                 } else {
                     this.showNotification(`❌ ${cveId} PoC #${pocIndex + 1} failed: ${res.data.failure_reason || 'Unknown error'}`, 'error');
                 }
@@ -137,7 +157,7 @@ createApp({
         
         async executeAllPocs(cveId) {
             try {
-                console.log(`🚀 Executing all PoCs via git clone for: ${cveId}`);
+                console.log(`🚀 Executing all PoCs for: ${cveId}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -146,18 +166,81 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/multi`, payload);
                 
-                console.log(`🎯 Multi-PoC git clone execution results:`, res.data);
+                console.log(`🎯 Multi-PoC execution results:`, res.data);
                 
                 res.data.forEach(result => this.updateExploitResult(result));
                 
                 const successful = res.data.filter(r => r.success).length;
-                const message = `${cveId}: ${successful}/${res.data.length} PoCs executed successfully via git clone`;
+                const message = `${cveId}: ${successful}/${res.data.length} PoCs executed successfully`;
                 this.showNotification(message, successful > 0 ? 'success' : 'error');
                 
             } catch (error) {
                 console.error(`❌ Multi-PoC execution failed:`, error);
                 this.showNotification(`❌ Multi-PoC execution failed: ${error.response?.data?.detail || error.message}`, 'error');
             }
+        },
+        
+        // Enhanced CVE display methods
+        getCriticalCount() {
+            if (!this.analystResult?.identified_cves) return 0;
+            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 9.0).length;
+        },
+        
+        getHighCount() {
+            if (!this.analystResult?.identified_cves) return 0;
+            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 7.0 && cve.cvss_score < 9.0).length;
+        },
+        
+        getMediumCount() {
+            if (!this.analystResult?.identified_cves) return 0;
+            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 4.0 && cve.cvss_score < 7.0).length;
+        },
+        
+        getCveCardClass(cve) {
+            if (cve.cvss_score >= 9.0) return 'border-red-500 bg-red-900 bg-opacity-20';
+            if (cve.cvss_score >= 7.0) return 'border-orange-500 bg-orange-900 bg-opacity-20';
+            if (cve.cvss_score >= 4.0) return 'border-yellow-500 bg-yellow-900 bg-opacity-20';
+            return 'border-green-500 bg-green-900 bg-opacity-20';
+        },
+        
+        getCvssLabel(score) {
+            if (!score) return 'N/A';
+            if (score >= 9.0) return `CRITICAL ${score}`;
+            if (score >= 7.0) return `HIGH ${score}`;
+            if (score >= 4.0) return `MEDIUM ${score}`;
+            return `LOW ${score}`;
+        },
+        
+        getCvssClass(score) {
+            if (!score) return 'bg-gray-500 text-white';
+            if (score >= 9.0) return 'bg-red-600 text-white vulnerability-critical';
+            if (score >= 7.0) return 'bg-orange-500 text-white';
+            if (score >= 4.0) return 'bg-yellow-500 text-black';
+            return 'bg-green-500 text-white';
+        },
+        
+        getRiskIcon(cve) {
+            if (cve.cvss_score >= 9.0) return 'fas fa-skull';
+            if (cve.cvss_score >= 7.0) return 'fas fa-exclamation-triangle';
+            if (cve.cvss_score >= 4.0) return 'fas fa-exclamation-circle';
+            return 'fas fa-info-circle';
+        },
+        
+        createSuccessEffect(cveId, pocIndex) {
+            // Create success visual effect
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 exploit-success p-8 rounded-lg text-center';
+            notification.innerHTML = `
+                <i class="fas fa-trophy text-4xl mb-4"></i>
+                <div class="text-xl font-bold">EXPLOIT SUCCESSFUL!</div>
+                <div class="text-sm">${cveId} PoC #${pocIndex + 1}</div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
         },
         
         updateExploitResult(newResult) {
@@ -180,13 +263,140 @@ createApp({
             );
         },
         
-        async cleanupFiles() {
+        getSourceBadgeClass(source) {
+            const classes = {
+                'AI Recommended GitHub': 'bg-purple-600 text-white',
+                'GitHub Repository': 'bg-gray-800 text-white',
+                'GitHub Code': 'bg-gray-700 text-white',
+                'AI Recommended ExploitDB': 'bg-red-700 text-white',
+                'ExploitDB': 'bg-red-600 text-white',
+                'PacketStorm': 'bg-orange-600 text-white'
+            };
+            return classes[source] || 'bg-blue-600 text-white';
+        },
+        
+        showPocQuality(poc) {
+            if (poc.ai_recommended) {
+                return `🤖 AI Recommended (${Math.round((poc.ai_confidence || 0.5) * 100)}% confidence)`;
+            }
+            if (poc.repo_score) {
+                return `Quality Score: ${poc.repo_score}`;
+            }
+            return '';
+        },
+        
+        getTotalPoCs() {
+            return this.pocResults.reduce((total, result) => total + result.available_pocs.length, 0);
+        },
+        
+        getGitHubRepos() {
+            return this.pocResults.reduce((total, result) => 
+                total + result.available_pocs.filter(poc => poc.source.includes('GitHub')).length, 0);
+        },
+        
+        getAIRecommended() {
+            return this.pocResults.reduce((total, result) => 
+                total + result.available_pocs.filter(poc => poc.ai_recommended).length, 0);
+        },
+        
+        toggleCode(cveId, pocIndex) {
+            const key = `${cveId}_${pocIndex}`;
+            this.expandedCode[key] = !this.expandedCode[key];
+        },
+        
+        toggleExploitOutput(cveId, pocIndex) {
+            const key = `${cveId}_${pocIndex}`;
+            this.expandedOutputs[key] = !this.expandedOutputs[key];
+        },
+        
+        toggleCveDetails(cveId) {
+            this.expandedCves[cveId] = !this.expandedCves[cveId];
+        },
+        
+        formatTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        },
+        
+        formatCveExplanation(explanation) {
+            if (!explanation) return '';
+            
+            return explanation
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                .replace(/^/, '<p>')
+                .replace(/$/, '</p>');
+        },
+        
+        showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-3 rounded shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' :
+                type === 'error' ? 'bg-red-500 text-white' :
+                'bg-blue-500 text-white'
+            }`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        },
+        
+        async loadResults() {
             try {
-                await axios.delete(`${API_URL}/api/scan/${this.sessionId}/exploit_files?keep_successful=true`);
-                this.showNotification('✅ Temporary git repositories cleaned up successfully', 'success');
+                const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
+                const r = res.data;
+                
+                if (this.debugMode) {
+                    console.log('📡 Loading results:', r);
+                }
+                
+                if (r.osint_result && !this.osintComplete) {
+                    this.osintResult = r.osint_result;
+                    this.osintComplete = true;
+                }
+                if (r.nmap_result && !this.nmapComplete) {
+                    this.nmapResult = r.nmap_result;
+                    this.nmapComplete = true;
+                }
+                if (r.analyst_result && !this.analysisComplete) {
+                    this.analystResult = r.analyst_result;
+                    this.analysisComplete = true;
+                }
+                if (r.poc_results) {
+                    const currentPocData = JSON.stringify(this.pocResults);
+                    const newPocData = JSON.stringify(r.poc_results);
+                    
+                    if (currentPocData !== newPocData) {
+                        if (this.debugMode) {
+                            console.log('🔄 PoC results updated:', r.poc_results);
+                        }
+                        this.pocResults = r.poc_results;
+                        if (r.poc_results.length > 0) {
+                            this.pocSearchStarted = true;
+                        }
+                    }
+                }
+                if (r.exploit_results) {
+                    r.exploit_results.forEach(newResult => {
+                        const existingIndex = this.exploitResults.findIndex(existing => 
+                            existing.cve_id === newResult.cve_id && 
+                            existing.poc_index === newResult.poc_index &&
+                            existing.timestamp === newResult.timestamp
+                        );
+                        
+                        if (existingIndex < 0) {
+                            this.exploitResults.push(newResult);
+                        }
+                    });
+                    
+                    this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                }
             } catch (error) {
-                console.error('File cleanup failed:', error);
-                this.showNotification('❌ File cleanup failed', 'error');
+                console.error('Failed to load results:', error);
             }
         },
         
@@ -220,112 +430,13 @@ createApp({
             }
         },
         
-        showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-3 rounded shadow-lg z-50 ${
-                type === 'success' ? 'bg-green-500 text-white' :
-                type === 'error' ? 'bg-red-500 text-white' :
-                'bg-blue-500 text-white'
-            }`;
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
-        },
-        
-        getCvssClass(score) {
-            if (!score) return 'bg-gray-500';
-            if (score >= 9) return 'bg-red-600';
-            if (score >= 7) return 'bg-orange-500';
-            if (score >= 4) return 'bg-yellow-500';
-            return 'bg-green-500';
-        },
-        
-        getSourceBadgeClass(source) {
-            const classes = {
-                'GitHub Repository': 'bg-gray-800 text-white',
-                'GitHub Code': 'bg-gray-700 text-white',
-                'ExploitDB': 'bg-red-600 text-white',
-                'PacketStorm': 'bg-orange-600 text-white'
-            };
-            return classes[source] || 'bg-blue-600 text-white';
-        },
-        
-        getTotalPoCs() {
-            return this.pocResults.reduce((total, result) => total + result.available_pocs.length, 0);
-        },
-        
-        getGitHubRepos() {
-            return this.pocResults.reduce((total, result) => 
-                total + result.available_pocs.filter(poc => poc.source === 'GitHub Repository').length, 0);
-        },
-        
-        toggleCode(cveId, pocIndex) {
-            const key = `${cveId}_${pocIndex}`;
-            this.expandedCode[key] = !this.expandedCode[key];
-        },
-        
-        toggleExploitOutput(cveId, pocIndex) {
-            const key = `${cveId}_${pocIndex}`;
-            this.expandedOutputs[key] = !this.expandedOutputs[key];
-        },
-        
-        formatTimestamp(timestamp) {
-            return new Date(timestamp).toLocaleString();
-        },
-        
-        async loadResults() {
+        async cleanupFiles() {
             try {
-                const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
-                const r = res.data;
-                
-                console.log('📡 Loading results:', r);
-                
-                if (r.osint_result && !this.osintComplete) {
-                    this.osintResult = r.osint_result;
-                    this.osintComplete = true;
-                }
-                if (r.nmap_result && !this.nmapComplete) {
-                    this.nmapResult = r.nmap_result;
-                    this.nmapComplete = true;
-                }
-                if (r.analyst_result && !this.analysisComplete) {
-                    this.analystResult = r.analyst_result;
-                    this.analysisComplete = true;
-                }
-                if (r.poc_results) {
-                    // Check if poc results have changed
-                    const currentPocData = JSON.stringify(this.pocResults);
-                    const newPocData = JSON.stringify(r.poc_results);
-                    
-                    if (currentPocData !== newPocData) {
-                        console.log('🔄 PoC results updated:', r.poc_results);
-                        this.pocResults = r.poc_results;
-                        if (r.poc_results.length > 0) {
-                            this.pocSearchStarted = true;
-                        }
-                    }
-                }
-                if (r.exploit_results) {
-                    r.exploit_results.forEach(newResult => {
-                        const existingIndex = this.exploitResults.findIndex(existing => 
-                            existing.cve_id === newResult.cve_id && 
-                            existing.poc_index === newResult.poc_index &&
-                            existing.timestamp === newResult.timestamp
-                        );
-                        
-                        if (existingIndex < 0) {
-                            this.exploitResults.push(newResult);
-                        }
-                    });
-                    
-                    this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                }
+                await axios.delete(`${API_URL}/api/scan/${this.sessionId}/exploit_files?keep_successful=true`);
+                this.showNotification('✅ Temporary files cleaned up successfully', 'success');
             } catch (error) {
-                console.error('Failed to load results:', error);
+                console.error('File cleanup failed:', error);
+                this.showNotification('❌ File cleanup failed', 'error');
             }
         },
         
@@ -341,43 +452,13 @@ createApp({
             Object.assign(this.$data, this.$options.data());
         },
         
-        toggleCveDetails(cveId) {
-            this.expandedCves[cveId] = !this.expandedCves[cveId];
-        },
-        
-        formatCveExplanation(explanation) {
-            if (!explanation) return '';
-            
-            return explanation
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/\n\n/g, '</p><p>')
-                .replace(/\n/g, '<br>')
-                .replace(/^/, '<p>')
-                .replace(/$/, '</p>');
-        },
-        
-        getPortRisk(port, service) {
-            const highRiskPorts = [445, 3389, 135, 139, 88, 389, 636, 1433, 3306, 5432];
-            const mediumRiskPorts = [80, 443, 21, 22, 23, 25, 53, 110, 143, 993, 995, 587, 465];
-            
-            if (highRiskPorts.includes(port)) return 'HIGH';
-            if (mediumRiskPorts.includes(port)) return 'MED';
-            return 'LOW';
-        },
-        
-        getPortRiskClass(port, service) {
-            const risk = this.getPortRisk(port, service);
-            if (risk === 'HIGH') return 'bg-red-600';
-            if (risk === 'MED') return 'bg-yellow-500';
-            return 'bg-green-500';
-        },
-        
-        // Debug method to inspect PoC data
+        // Debug method
         inspectPocData() {
             console.log('🐛 Debug - Current PoC Results:');
             console.log('pocResults length:', this.pocResults.length);
             console.log('pocSearchStarted:', this.pocSearchStarted);
+            console.log('AI Agent Status:', this.aiAgentStatus);
+            console.log('Search Progress:', this.pocSearchProgress);
             console.log('pocResults data:', this.pocResults);
             
             this.pocResults.forEach((result, index) => {
@@ -386,6 +467,9 @@ createApp({
                 console.log(`  Status:`, result.status);
                 result.available_pocs.forEach((poc, pocIndex) => {
                     console.log(`    PoC ${pocIndex + 1}: ${poc.source} - ${poc.url}`);
+                    if (poc.ai_recommended) {
+                        console.log(`      🤖 AI Recommended (${poc.ai_confidence})`);
+                    }
                 });
             });
         }
@@ -426,10 +510,10 @@ createApp({
             this.loadResults();
         }
         
-        // Add debug button if in debug mode
+        // Add debug functions
         if (this.debugMode) {
             window.inspectPocData = this.inspectPocData;
-            console.log('🐛 Debug commands available: inspectPocData()');
+            console.log('🐛 Debug commands: inspectPocData()');
         }
     }
 }).mount('#app');
