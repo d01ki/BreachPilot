@@ -9,33 +9,70 @@ createApp({
             pocResults: [], exploitResults: [],
             osintComplete: false, nmapComplete: false, analysisComplete: false,
             selectedCves: [], pocSearchStarted: false,
-            expandedCves: {}
+            expandedCves: {},
+            debugMode: false,
+            showRawOutput: false
         }
     },
     methods: {
         async startScan() {
             if (!this.targetIp) return;
-            const res = await axios.post(`${API_URL}/api/scan/start`, { target_ip: this.targetIp });
-            this.sessionId = res.data.session_id;
-            this.startPolling();
-            setTimeout(() => this.runStep('osint'), 500);
+            try {
+                const res = await axios.post(`${API_URL}/api/scan/start`, { target_ip: this.targetIp });
+                this.sessionId = res.data.session_id;
+                this.startPolling();
+                setTimeout(() => this.runStep('osint'), 500);
+            } catch (error) {
+                console.error('Failed to start scan:', error);
+                alert('Failed to start scan: ' + (error.response?.data?.detail || error.message));
+            }
         },
         async runStep(step) {
             this.currentStep = step;
-            const url = `${API_URL}/api/scan/${this.sessionId}/${step === 'analyze' ? 'analyze' : step}`;
-            const res = await axios.post(url);
-            if (step === 'osint') { this.osintResult = res.data; this.osintComplete = true; }
-            if (step === 'nmap') { this.nmapResult = res.data; this.nmapComplete = true; }
-            if (step === 'analyze') { this.analystResult = res.data; this.analysisComplete = true; }
-            this.currentStep = '';
+            try {
+                const url = `${API_URL}/api/scan/${this.sessionId}/${step === 'analyze' ? 'analyze' : step}`;
+                console.log(`Running step: ${step}, URL: ${url}`);
+                
+                const res = await axios.post(url);
+                console.log(`Step ${step} response:`, res.data);
+                
+                if (step === 'osint') { 
+                    this.osintResult = res.data; 
+                    this.osintComplete = true;
+                    console.log('OSINT completed:', this.osintResult);
+                }
+                if (step === 'nmap') { 
+                    this.nmapResult = res.data; 
+                    this.nmapComplete = true;
+                    console.log('Nmap completed:', this.nmapResult);
+                    console.log('Open ports:', this.nmapResult.open_ports);
+                    console.log('Status:', this.nmapResult.status);
+                }
+                if (step === 'analyze') { 
+                    this.analystResult = res.data; 
+                    this.analysisComplete = true;
+                    console.log('Analysis completed:', this.analystResult);
+                }
+                this.currentStep = '';
+            } catch (error) {
+                console.error(`Step ${step} failed:`, error);
+                this.currentStep = '';
+                alert(`Step ${step} failed: ` + (error.response?.data?.detail || error.message));
+            }
         },
         async searchPocs() {
-            this.pocSearchStarted = true;
-            this.currentStep = 'poc_search';
-            const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`, 
-                { selected_cves: this.selectedCves });
-            this.pocResults = res.data;
-            this.currentStep = '';
+            try {
+                this.pocSearchStarted = true;
+                this.currentStep = 'poc_search';
+                const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`, 
+                    { selected_cves: this.selectedCves });
+                this.pocResults = res.data;
+                this.currentStep = '';
+            } catch (error) {
+                console.error('PoC search failed:', error);
+                this.currentStep = '';
+                alert('PoC search failed: ' + (error.response?.data?.detail || error.message));
+            }
         },
         async executePoc(cveId, poc, pocIndex) {
             try {
@@ -45,8 +82,9 @@ createApp({
                     target_ip: this.targetIp
                 });
                 this.exploitResults.push({ ...res.data, poc_index: pocIndex });
-            } catch (e) {
-                alert('Exploit failed: ' + e.message);
+            } catch (error) {
+                console.error('Exploit failed:', error);
+                alert('Exploit failed: ' + (error.response?.data?.detail || error.message));
             }
         },
         getCvssClass(score) {
@@ -57,15 +95,41 @@ createApp({
             return 'bg-green-500';
         },
         async loadResults() {
-            const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
-            const r = res.data;
-            if (r.osint_result) this.osintResult = r.osint_result;
-            if (r.nmap_result) this.nmapResult = r.nmap_result;
-            if (r.analyst_result) this.analystResult = r.analyst_result;
-            if (r.poc_results) this.pocResults = r.poc_results;
+            try {
+                const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
+                const r = res.data;
+                
+                // Update results with better state management
+                if (r.osint_result && !this.osintComplete) {
+                    this.osintResult = r.osint_result;
+                    this.osintComplete = true;
+                }
+                if (r.nmap_result && !this.nmapComplete) {
+                    this.nmapResult = r.nmap_result;
+                    this.nmapComplete = true;
+                    console.log('Nmap result loaded from polling:', this.nmapResult);
+                }
+                if (r.analyst_result && !this.analysisComplete) {
+                    this.analystResult = r.analyst_result;
+                    this.analysisComplete = true;
+                }
+                if (r.poc_results) {
+                    this.pocResults = r.poc_results;
+                }
+                if (r.exploit_results) {
+                    this.exploitResults = r.exploit_results;
+                }
+            } catch (error) {
+                console.error('Failed to load results:', error);
+                // Don't show alert for polling errors to avoid spam
+            }
         },
         startPolling() {
-            setInterval(() => this.loadResults(), 3000);
+            setInterval(() => {
+                if (this.sessionId) {
+                    this.loadResults();
+                }
+            }, 3000);
         },
         reset() {
             Object.assign(this.$data, this.$options.data());
@@ -86,8 +150,8 @@ createApp({
                 .replace(/$/, '</p>');
         },
         getPortRisk(port, service) {
-            const highRiskPorts = [445, 3389, 135, 139, 88, 389, 636];
-            const mediumRiskPorts = [80, 443, 21, 22, 23, 25, 53, 110, 143, 993, 995];
+            const highRiskPorts = [445, 3389, 135, 139, 88, 389, 636, 1433, 3306, 5432];
+            const mediumRiskPorts = [80, 443, 21, 22, 23, 25, 53, 110, 143, 993, 995, 587, 465];
             
             if (highRiskPorts.includes(port)) return 'HIGH';
             if (mediumRiskPorts.includes(port)) return 'MED';
@@ -98,6 +162,13 @@ createApp({
             if (risk === 'HIGH') return 'bg-red-600';
             if (risk === 'MED') return 'bg-yellow-500';
             return 'bg-green-500';
+        }
+    },
+    mounted() {
+        // Enable debug mode if URL contains debug parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('debug') === 'true') {
+            this.debugMode = true;
         }
     }
 }).mount('#app');
