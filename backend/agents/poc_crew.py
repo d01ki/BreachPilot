@@ -11,110 +11,75 @@ logger = logging.getLogger(__name__)
 
 class PoCCrew:
     def __init__(self):
-        self.exploits_dir = config.DATA_DIR / "exploits"
-        self.exploits_dir.mkdir(exist_ok=True)
+        pass
     
     def search_pocs(self, selected_cves: List[str], limit: int = 4) -> List[PoCResult]:
-        """Search for PoC exploits for selected CVEs with enhanced collection"""
-        logger.info(f"Searching PoCs for {len(selected_cves)} CVEs (limit: {limit} per CVE)")
+        """Search for PoC exploits prioritizing GitHub repositories for git clone"""
+        logger.info(f"Searching GitHub-focused PoCs for {len(selected_cves)} CVEs (limit: {limit} per CVE)")
         results = []
         
         for cve_id in selected_cves:
-            pocs = self._search_single_cve_enhanced(cve_id, limit)
-            
-            # Save each PoC as separate file for easy execution
-            saved_pocs = []
-            for i, poc in enumerate(pocs, 1):
-                if poc.code and poc.code.strip():
-                    filename = self._save_poc_code(cve_id, poc, i)
-                    if filename:
-                        poc.filename = filename
-                        poc.execution_command = self._generate_execution_command(filename, poc.code)
-                        saved_pocs.append(poc)
-                else:
-                    # Try to fetch code if not already present
-                    code = self._fetch_code_from_url(poc.url)
-                    if code:
-                        poc.code = code
-                        filename = self._save_poc_code(cve_id, poc, i)
-                        if filename:
-                            poc.filename = filename
-                            poc.execution_command = self._generate_execution_command(filename, code)
-                            saved_pocs.append(poc)
-                    else:
-                        saved_pocs.append(poc)  # Keep it even without code for reference
+            pocs = self._search_single_cve_github_focused(cve_id, limit)
             
             result = PoCResult(
                 cve_id=cve_id,
-                status=StepStatus.COMPLETED if saved_pocs else StepStatus.FAILED,
-                available_pocs=saved_pocs
+                status=StepStatus.COMPLETED if pocs else StepStatus.FAILED,
+                available_pocs=pocs
             )
             
-            logger.info(f"Found {len(saved_pocs)} PoCs for {cve_id} ({len([p for p in saved_pocs if hasattr(p, 'filename')])} with code)")
+            github_count = len([p for p in pocs if 'github.com' in p.url])
+            logger.info(f"Found {len(pocs)} PoCs for {cve_id} ({github_count} GitHub repos)")
             results.append(result)
         
         return results
     
-    def _search_single_cve_enhanced(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Enhanced search for PoCs from multiple sources"""
+    def _search_single_cve_github_focused(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search for PoCs with focus on GitHub repositories"""
         all_pocs = []
         
-        # Search GitHub (multiple strategies)
-        github_pocs = self._search_github_enhanced(cve_id, limit)
-        all_pocs.extend(github_pocs)
+        # Primary search: GitHub repositories (for git clone)
+        github_repos = self._search_github_repositories(cve_id, limit)
+        all_pocs.extend(github_repos)
         
-        # Search ExploitDB
-        exploitdb_pocs = self._search_exploitdb_enhanced(cve_id, limit)
-        all_pocs.extend(exploitdb_pocs)
+        # Secondary search: GitHub code files (as backup)
+        if len(github_repos) < limit:
+            github_files = self._search_github_code_files(cve_id, limit - len(github_repos))
+            all_pocs.extend(github_files)
         
-        # Search additional sources
-        additional_pocs = self._search_additional_sources(cve_id, limit)
-        all_pocs.extend(additional_pocs)
+        # Tertiary search: Other sources (if still need more)
+        if len(all_pocs) < limit:
+            other_sources = self._search_other_sources(cve_id, limit - len(all_pocs))
+            all_pocs.extend(other_sources)
         
-        # Deduplicate by URL and prioritize by quality
-        unique_pocs = {}
-        for poc in all_pocs:
-            if poc.url not in unique_pocs:
-                unique_pocs[poc.url] = poc
-            elif len(poc.code) > len(unique_pocs[poc.url].code):
-                unique_pocs[poc.url] = poc
+        # Deduplicate and prioritize GitHub repos
+        unique_pocs = self._deduplicate_and_prioritize(all_pocs)
         
-        # Sort by quality (code length, stars, source priority)
-        sorted_pocs = sorted(
-            unique_pocs.values(),
-            key=lambda p: (
-                len(p.code) if p.code else 0,
-                p.stars,
-                1 if p.source == 'GitHub' else 2 if p.source == 'ExploitDB' else 3
-            ),
-            reverse=True
-        )
-        
-        return sorted_pocs[:limit]
+        return unique_pocs[:limit]
     
-    def _search_github_enhanced(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Enhanced GitHub search with multiple strategies"""
+    def _search_github_repositories(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search GitHub repositories (highest priority for git clone)"""
         pocs = []
         try:
             headers = {'Accept': 'application/vnd.github.v3+json'}
             
-            # Enhanced search queries
+            # Repository search queries optimized for PoC repositories
             search_queries = [
                 f'{cve_id} PoC',
                 f'{cve_id} exploit',
-                f'{cve_id} vulnerability python',
-                f'"{cve_id}" proof of concept',
+                f'{cve_id} proof concept',
+                f'"{cve_id}" vulnerability',
                 f'{cve_id.replace("-", "_")} exploit'
             ]
             
             seen_repos = set()
             
             for query in search_queries:
-                if len(pocs) >= limit * 2:
+                if len(pocs) >= limit * 2:  # Get extra for quality filtering
                     break
-                    
+                
                 try:
-                    url = f'https://api.github.com/search/repositories?q={query}&sort=stars&order=desc&per_page=10'
+                    # Search repositories specifically
+                    url = f'https://api.github.com/search/repositories?q={query} in:name,description,readme&sort=stars&order=desc&per_page=10'
                     response = requests.get(url, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
@@ -123,141 +88,166 @@ class PoCCrew:
                         for item in data.get('items', []):
                             if len(pocs) >= limit * 2:
                                 break
-                                
+                            
                             repo_name = item['full_name']
                             if repo_name in seen_repos:
                                 continue
                             seen_repos.add(repo_name)
                             
-                            # Get exploit code from repo
-                            code = self._fetch_exploit_code_from_repo(repo_name, cve_id)
+                            # Prioritize repositories with specific characteristics
+                            repo_score = self._calculate_repo_score(item, cve_id)
                             
-                            poc = PoCInfo(
-                                source='GitHub',
-                                url=item['html_url'],
-                                description=item.get('description', ''),
-                                author=item['owner']['login'],
-                                stars=item.get('stargazers_count', 0),
-                                code=code
-                            )
-                            pocs.append(poc)
-                    
-                    # Also search code directly
-                    code_url = f'https://api.github.com/search/code?q={cve_id}+extension:py+OR+extension:sh'
-                    code_response = requests.get(code_url, headers=headers, timeout=10)
-                    
-                    if code_response.status_code == 200:
-                        code_data = code_response.json()
-                        for item in code_data.get('items', [])[:3]:
-                            if len(pocs) >= limit * 2:
-                                break
-                                
-                            repo_name = item['repository']['full_name']
-                            if repo_name in seen_repos:
-                                continue
-                                
-                            file_path = item['path']
-                            code = self._fetch_file_content(repo_name, file_path)
-                            
-                            if code and len(code.strip()) > 100:
+                            if repo_score > 0:  # Only include relevant repositories
                                 poc = PoCInfo(
-                                    source='GitHub Code',
+                                    source='GitHub Repository',
                                     url=item['html_url'],
-                                    description=f'Exploit code: {file_path}',
-                                    author=item['repository']['owner']['login'],
-                                    stars=item['repository'].get('stargazers_count', 0),
-                                    code=code
+                                    description=item.get('description', f'GitHub repository for {cve_id}'),
+                                    author=item['owner']['login'],
+                                    stars=item.get('stargazers_count', 0),
+                                    code="",  # Will be cloned, not copied
+                                    repo_score=repo_score  # For prioritization
                                 )
                                 pocs.append(poc)
-                            
+                                
                 except Exception as e:
-                    logger.debug(f"GitHub search failed: {e}")
+                    logger.debug(f"GitHub repo search query '{query}' failed: {e}")
                     continue
             
         except Exception as e:
-            logger.warning(f"GitHub search failed: {e}")
+            logger.warning(f"GitHub repository search failed: {e}")
         
         return pocs
     
-    def _fetch_exploit_code_from_repo(self, repo_name: str, cve_id: str) -> str:
-        """Fetch exploit code from GitHub repo"""
-        try:
-            api_url = f'https://api.github.com/repos/{repo_name}/contents'
-            response = requests.get(api_url, timeout=10)
-            
-            if response.status_code == 200:
-                files = response.json()
-                if not isinstance(files, list):
-                    return ""
-                
-                # Look for exploit files with various patterns
-                candidate_files = []
-                
-                for file_info in files:
-                    if not isinstance(file_info, dict):
-                        continue
-                        
-                    name = file_info.get('name', '').lower()
-                    
-                    # Score files based on relevance
-                    score = 0
-                    if cve_id.lower() in name:
-                        score += 10
-                    if any(ext in name for ext in ['.py', '.sh', '.rb', '.pl']):
-                        score += 5
-                    if any(keyword in name for keyword in ['exploit', 'poc', 'cve', 'vuln']):
-                        score += 3
-                    if 'readme' in name or 'license' in name:
-                        score -= 5
-                    
-                    if score > 0:
-                        candidate_files.append((score, file_info))
-                
-                # Sort by score and try to fetch content
-                candidate_files.sort(key=lambda x: x[0], reverse=True)
-                
-                for score, file_info in candidate_files[:2]:
-                    download_url = file_info.get('download_url')
-                    if download_url:
-                        try:
-                            code_response = requests.get(download_url, timeout=10)
-                            if code_response.status_code == 200:
-                                content = code_response.text
-                                if len(content.strip()) > 50:
-                                    return content[:10000]
-                        except:
-                            continue
+    def _calculate_repo_score(self, repo_item: Dict, cve_id: str) -> int:
+        """Calculate repository relevance score"""
+        score = 0
         
-        except Exception as e:
-            logger.debug(f"Error fetching from {repo_name}: {e}")
+        name = repo_item.get('name', '').lower()
+        description = repo_item.get('description', '').lower()
+        full_name = repo_item.get('full_name', '').lower()
         
-        return ""
+        # High priority: CVE mentioned in name
+        if cve_id.lower() in name:
+            score += 100
+        
+        # High priority: CVE mentioned in description
+        if cve_id.lower() in description:
+            score += 80
+        
+        # Medium priority: exploit/poc keywords in name
+        if any(keyword in name for keyword in ['exploit', 'poc', 'cve', 'vuln']):
+            score += 50
+        
+        # Medium priority: exploit/poc keywords in description
+        if any(keyword in description for keyword in ['exploit', 'poc', 'proof', 'vulnerability']):
+            score += 30
+        
+        # Stars bonus (up to 20 points)
+        stars = repo_item.get('stargazers_count', 0)
+        score += min(stars, 20)
+        
+        # Recent activity bonus
+        updated_at = repo_item.get('updated_at', '')
+        if updated_at and '2024' in updated_at or '2023' in updated_at:
+            score += 10
+        
+        # Language bonus (Python/Shell preferred for exploits)
+        language = repo_item.get('language', '').lower()
+        if language in ['python', 'shell', 'c', 'c++']:
+            score += 15
+        
+        # Penalty for non-exploit repositories
+        if any(keyword in full_name for keyword in ['awesome', 'list', 'collection', 'paper']):
+            score -= 50
+        
+        # Penalty for very old repositories
+        if updated_at and '2020' in updated_at or '2019' in updated_at:
+            score -= 10
+        
+        return score
     
-    def _fetch_file_content(self, repo_name: str, file_path: str) -> str:
-        """Fetch specific file content from GitHub repo"""
+    def _search_github_code_files(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search GitHub code files (secondary priority)"""
+        pocs = []
         try:
-            api_url = f'https://api.github.com/repos/{repo_name}/contents/{file_path}'
             headers = {'Accept': 'application/vnd.github.v3+json'}
             
-            response = requests.get(api_url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                file_data = response.json()
-                if file_data.get('content'):
-                    import base64
-                    content = base64.b64decode(file_data['content']).decode('utf-8', errors='ignore')
-                    return content[:10000]
+            # Code search for specific file types
+            code_queries = [
+                f'{cve_id} extension:py',
+                f'{cve_id} extension:sh',
+                f'{cve_id} extension:c',
+                f'"{cve_id}" filename:exploit'
+            ]
+            
+            seen_files = set()
+            
+            for query in code_queries:
+                if len(pocs) >= limit:
+                    break
+                    
+                try:
+                    url = f'https://api.github.com/search/code?q={query}&sort=indexed&order=desc&per_page=5'
+                    response = requests.get(url, headers=headers, timeout=10)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        
+                        for item in data.get('items', []):
+                            if len(pocs) >= limit:
+                                break
+                            
+                            file_url = item['html_url']
+                            if file_url in seen_files:
+                                continue
+                            seen_files.add(file_url)
+                            
+                            poc = PoCInfo(
+                                source='GitHub Code',
+                                url=file_url,
+                                description=f'Exploit code: {item["name"]} in {item["repository"]["full_name"]}',
+                                author=item['repository']['owner']['login'],
+                                stars=item['repository'].get('stargazers_count', 0),
+                                code=""  # Will be fetched if needed
+                            )
+                            pocs.append(poc)
+                            
+                except Exception as e:
+                    logger.debug(f"GitHub code search failed: {e}")
+                    continue
+                    
         except Exception as e:
-            logger.debug(f"Error fetching file content: {e}")
+            logger.warning(f"GitHub code search failed: {e}")
         
-        return ""
+        return pocs
     
-    def _search_exploitdb_enhanced(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Enhanced ExploitDB search"""
+    def _search_other_sources(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search other sources as fallback"""
+        pocs = []
+        
+        # Search ExploitDB
+        try:
+            exploitdb_pocs = self._search_exploitdb(cve_id, limit)
+            pocs.extend(exploitdb_pocs)
+        except Exception as e:
+            logger.debug(f"ExploitDB search failed: {e}")
+        
+        # Search PacketStorm if still need more
+        if len(pocs) < limit:
+            try:
+                packetstorm_pocs = self._search_packetstorm(cve_id, limit - len(pocs))
+                pocs.extend(packetstorm_pocs)
+            except Exception as e:
+                logger.debug(f"PacketStorm search failed: {e}")
+        
+        return pocs
+    
+    def _search_exploitdb(self, cve_id: str, limit: int) -> List[PoCInfo]:
+        """Search ExploitDB"""
         pocs = []
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
             search_url = f'https://www.exploit-db.com/search?cve={cve_id}'
@@ -266,91 +256,27 @@ class PoCCrew:
             if response.status_code == 200:
                 # Parse HTML for exploit IDs
                 exploit_ids = re.findall(r'/exploits/(\d+)', response.text)
-                
-                # Remove duplicates while preserving order
-                seen = set()
-                unique_ids = []
-                for eid in exploit_ids:
-                    if eid not in seen:
-                        seen.add(eid)
-                        unique_ids.append(eid)
+                unique_ids = list(dict.fromkeys(exploit_ids))  # Remove duplicates, preserve order
                 
                 for exploit_id in unique_ids[:limit]:
                     exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
-                    raw_url = f'https://www.exploit-db.com/raw/{exploit_id}'
                     
-                    # Fetch exploit code
-                    code, description = self._fetch_exploitdb_details(exploit_id, raw_url)
-                    
-                    if code and len(code.strip()) > 50:
-                        poc = PoCInfo(
-                            source='ExploitDB',
-                            url=exploit_url,
-                            description=description or f'ExploitDB #{exploit_id}',
-                            author='ExploitDB',
-                            code=code
-                        )
-                        pocs.append(poc)
+                    poc = PoCInfo(
+                        source='ExploitDB',
+                        url=exploit_url,
+                        description=f'ExploitDB #{exploit_id} for {cve_id}',
+                        author='ExploitDB',
+                        code=""  # Will be fetched if needed
+                    )
+                    pocs.append(poc)
             
         except Exception as e:
-            logger.warning(f"ExploitDB search failed: {e}")
-        
-        return pocs
-    
-    def _fetch_exploitdb_details(self, exploit_id: str, raw_url: str) -> tuple:
-        """Fetch ExploitDB details"""
-        code = ""
-        description = ""
-        
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/plain,text/html,*/*'
-            }
-            
-            # Fetch raw exploit code
-            code_response = requests.get(raw_url, headers=headers, timeout=15)
-            if code_response.status_code == 200:
-                code = code_response.text[:10000]
-            
-            # Fetch exploit page for description
-            exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
-            page_response = requests.get(exploit_url, headers=headers, timeout=15)
-            if page_response.status_code == 200:
-                # Extract title/description from HTML
-                title_patterns = [
-                    r'<title>([^<]+)</title>',
-                    r'<h1[^>]*>([^<]+)</h1>',
-                    r'<h2[^>]*>([^<]+)</h2>'
-                ]
-                
-                for pattern in title_patterns:
-                    match = re.search(pattern, page_response.text, re.IGNORECASE)
-                    if match:
-                        description = match.group(1).strip()
-                        if 'exploit-db' not in description.lower():
-                            break
-        
-        except Exception as e:
-            logger.debug(f"Error fetching ExploitDB details for {exploit_id}: {e}")
-        
-        return code, description
-    
-    def _search_additional_sources(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Search additional sources for PoCs"""
-        pocs = []
-        
-        # Search Packet Storm
-        try:
-            packetstorm_pocs = self._search_packetstorm(cve_id, limit)
-            pocs.extend(packetstorm_pocs)
-        except Exception as e:
-            logger.debug(f"PacketStorm search failed: {e}")
+            logger.debug(f"ExploitDB search error: {e}")
         
         return pocs
     
     def _search_packetstorm(self, cve_id: str, limit: int) -> List[PoCInfo]:
-        """Search Packet Storm"""
+        """Search PacketStorm"""
         pocs = []
         try:
             url = f'https://packetstormsecurity.com/search/?q={cve_id}'
@@ -359,135 +285,54 @@ class PoCCrew:
             
             if response.status_code == 200:
                 # Parse for exploit links
-                links = re.findall(r'href=\"(/files/[^\"]+)\"', response.text)
+                links = re.findall(r'href="(/files/[^"]+)"', response.text)
                 
                 for link in links[:limit]:
                     full_url = f'https://packetstormsecurity.com{link}'
                     
-                    # Try to fetch code content
-                    try:
-                        code_response = requests.get(full_url, headers=headers, timeout=10)
-                        if code_response.status_code == 200:
-                            content = code_response.text
-                            # Check if it's actual code/exploit content
-                            if any(keyword in content.lower() for keyword in ['#!/', 'import', 'def ', 'class ', 'exploit']):
-                                poc = PoCInfo(
-                                    source='PacketStorm',
-                                    url=full_url,
-                                    description=f'PacketStorm Security - {link.split("/")[-1]}',
-                                    author='PacketStorm',
-                                    code=content[:10000] if len(content) < 50000 else content[:10000]
-                                )
-                                pocs.append(poc)
-                    except:
-                        # Add without code for reference
-                        poc = PoCInfo(
-                            source='PacketStorm',
-                            url=full_url,
-                            description=f'PacketStorm Security - {link.split("/")[-1]}',
-                            author='PacketStorm'
-                        )
-                        pocs.append(poc)
+                    poc = PoCInfo(
+                        source='PacketStorm',
+                        url=full_url,
+                        description=f'PacketStorm Security - {link.split("/")[-1]}',
+                        author='PacketStorm',
+                        code=""
+                    )
+                    pocs.append(poc)
         
         except Exception as e:
             logger.debug(f"PacketStorm search error: {e}")
         
         return pocs
     
-    def _fetch_code_from_url(self, url: str) -> str:
-        """Fetch code content from a URL"""
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    def _deduplicate_and_prioritize(self, pocs: List[PoCInfo]) -> List[PoCInfo]:
+        """Remove duplicates and prioritize by source and quality"""
+        # Remove duplicates by URL
+        unique_pocs = {}
+        for poc in pocs:
+            if poc.url not in unique_pocs:
+                unique_pocs[poc.url] = poc
+        
+        # Prioritization scoring
+        def priority_score(poc: PoCInfo) -> tuple:
+            source_priority = {
+                'GitHub Repository': 1000,  # Highest priority for git clone
+                'GitHub Code': 800,
+                'ExploitDB': 600,
+                'PacketStorm': 400
             }
             
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code == 200:
-                content = response.text
-                
-                # If it's a GitHub raw URL or similar, return directly
-                if 'raw.githubusercontent.com' in url or any(ext in url for ext in ['.py', '.sh', '.rb', '.pl']):
-                    return content[:10000]
-                
-                # If it's an HTML page, try to extract code blocks
-                code_blocks = re.findall(r'<pre[^>]*>(.*?)</pre>', content, re.DOTALL)
-                if code_blocks:
-                    return code_blocks[0][:10000]
-                
-                # Look for code patterns in the content
-                if any(keyword in content.lower() for keyword in ['#!/', 'import ', 'def ', 'class ', '#include']):
-                    return content[:10000]
-        
-        except Exception as e:
-            logger.debug(f"Error fetching code from {url}: {e}")
-        
-        return ""
-    
-    def _save_poc_code(self, cve_id: str, poc: PoCInfo, index: int) -> str:
-        """Save PoC code to file with proper naming convention"""
-        if not poc.code or not poc.code.strip():
-            return ""
-        
-        try:
-            # Generate filename: cve-xxxx-xxxx-001.py
-            cve_clean = cve_id.replace('CVE-', '').replace('cve-', '')
-            extension = self._detect_file_extension(poc.code)
-            filename = f"cve-{cve_clean}-{index:03d}.{extension}"
-            filepath = self.exploits_dir / filename
+            base_score = source_priority.get(poc.source, 0)
             
-            # Add execution metadata as comments
-            metadata = f"""#!/usr/bin/env python3
-# CVE: {cve_id}
-# Source: {poc.source}
-# Author: {poc.author}
-# URL: {poc.url}
-# Description: {poc.description}
-# Generated by BreachPilot
-
-"""
+            # Add repo score if available
+            if hasattr(poc, 'repo_score'):
+                base_score += poc.repo_score
             
-            # Write code with metadata
-            with open(filepath, 'w', encoding='utf-8') as f:
-                if extension == 'py':
-                    f.write(metadata)
-                f.write(poc.code)
+            # Add stars bonus
+            stars_bonus = min(poc.stars * 2, 100) if poc.stars else 0
             
-            # Make executable
-            os.chmod(filepath, 0o755)
-            
-            return filename
-            
-        except Exception as e:
-            logger.error(f"Error saving PoC code: {e}")
-            return ""
-    
-    def _detect_file_extension(self, code: str) -> str:
-        """Detect appropriate file extension based on code content"""
-        code_lower = code.lower()
+            return (base_score + stars_bonus, poc.stars, poc.source)
         
-        if any(keyword in code_lower for keyword in ['import ', 'def ', 'class ', 'from ', 'print(']):
-            return 'py'
-        elif any(keyword in code_lower for keyword in ['#!/bin/bash', '#!/bin/sh', 'curl ', 'wget ']):
-            return 'sh'
-        elif any(keyword in code_lower for keyword in ['require ', 'def ', 'class ', 'puts ']):
-            return 'rb'
-        elif any(keyword in code_lower for keyword in ['use ', 'sub ', 'my ', '$']):
-            return 'pl'
-        else:
-            # Default to Python for most exploits
-            return 'py'
-    
-    def _generate_execution_command(self, filename: str, code: str) -> str:
-        """Generate appropriate execution command for the PoC"""
-        extension = filename.split('.')[-1]
+        # Sort by priority (highest first)
+        sorted_pocs = sorted(unique_pocs.values(), key=priority_score, reverse=True)
         
-        if extension == 'py':
-            return f"python3 {filename} [TARGET_IP]"
-        elif extension == 'sh':
-            return f"bash {filename} [TARGET_IP]"
-        elif extension == 'rb':
-            return f"ruby {filename} [TARGET_IP]"
-        elif extension == 'pl':
-            return f"perl {filename} [TARGET_IP]"
-        else:
-            return f"./{filename} [TARGET_IP]"
+        return sorted_pocs
