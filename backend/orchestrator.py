@@ -122,7 +122,7 @@ class ScanOrchestrator:
         return results
     
     def execute_poc_by_index(self, session_id: str, cve_id: str, poc_index: int, target_ip: str) -> ExploitResult:
-        """Execute a specific PoC by index"""
+        """Execute a specific PoC by index using git clone method"""
         logger.info(f"Executing PoC #{poc_index} for {cve_id}")
         
         session = self._get_session(session_id)
@@ -141,8 +141,8 @@ class ScanOrchestrator:
         if not poc_result or not target_poc:
             raise ValueError(f"PoC #{poc_index} not found for {cve_id}")
         
-        # Execute single PoC
-        result = self.exploit_crew._execute_single_poc_enhanced(target_ip, cve_id, target_poc, poc_index + 1)
+        # Execute single PoC using the new git clone method
+        result = self.exploit_crew._execute_single_poc_git(target_ip, cve_id, target_poc, poc_index + 1)
         
         # Update session
         session.exploit_results.append(result)
@@ -197,57 +197,39 @@ class ScanOrchestrator:
         return [er for er in session.exploit_results if er.success]
     
     def get_poc_files_info(self, session_id: str) -> Dict[str, List[str]]:
-        """Get information about saved PoC files"""
+        """Get information about git repositories instead of files"""
         session = self._get_session(session_id)
-        files_info = {}
+        repos_info = {}
         
         for poc_result in session.poc_results:
-            cve_files = []
+            cve_repos = []
             for poc in poc_result.available_pocs:
-                if hasattr(poc, 'filename') and poc.filename:
-                    file_path = config.DATA_DIR / "exploits" / poc.filename
-                    if file_path.exists():
-                        cve_files.append({
-                            'filename': poc.filename,
-                            'source': poc.source,
-                            'execution_command': getattr(poc, 'execution_command', ''),
-                            'file_size': file_path.stat().st_size,
-                            'exists': True
-                        })
+                if 'github.com' in poc.url:
+                    cve_repos.append({
+                        'url': poc.url,
+                        'source': poc.source,
+                        'description': poc.description,
+                        'author': poc.author,
+                        'stars': poc.stars,
+                        'repo_type': 'GitHub Repository'
+                    })
             
-            if cve_files:
-                files_info[poc_result.cve_id] = cve_files
+            if cve_repos:
+                repos_info[poc_result.cve_id] = cve_repos
         
-        return files_info
+        return repos_info
     
     def cleanup_exploit_files(self, session_id: str, keep_successful: bool = True):
-        """Clean up exploit files for a session"""
+        """Clean up temporary git repositories for a session"""
         try:
-            session = self._get_session(session_id)
-            exploits_dir = config.DATA_DIR / "exploits"
-            
-            if not exploits_dir.exists():
-                return
-            
-            # Get successful CVEs if we want to keep them
-            successful_cves = set()
-            if keep_successful:
-                successful_cves = {er.cve_id for er in session.exploit_results if er.success}
-            
-            # Remove files for unsuccessful CVEs
-            for poc_result in session.poc_results:
-                if keep_successful and poc_result.cve_id in successful_cves:
-                    continue
-                
-                for poc in poc_result.available_pocs:
-                    if hasattr(poc, 'filename') and poc.filename:
-                        file_path = exploits_dir / poc.filename
-                        if file_path.exists():
-                            file_path.unlink()
-                            logger.info(f"Cleaned up exploit file: {poc.filename}")
+            # Git repositories are automatically cleaned up by GitPoCExecutor
+            # This method is kept for API compatibility
+            if hasattr(self.exploit_crew, 'git_executor'):
+                self.exploit_crew.git_executor.cleanup()
+                logger.info("Cleaned up temporary git repositories")
             
         except Exception as e:
-            logger.error(f"Error cleaning up exploit files: {e}")
+            logger.error(f"Error cleaning up git repositories: {e}")
     
     def _get_session(self, session_id: str) -> ScanSession:
         if session_id not in self.sessions:
