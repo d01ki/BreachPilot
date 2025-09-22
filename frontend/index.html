@@ -46,14 +46,31 @@
                         <span v-else-if="nmapComplete">✓</span>
                         <span v-else>2</span>
                     </div>
-                    <h2 class="text-xl font-bold flex-1">Nmap</h2>
+                    <h2 class="text-xl font-bold flex-1">Nmap Scan</h2>
                     <button v-if="osintComplete && !nmapComplete" @click="runStep('nmap')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
                 </div>
-                <div v-if="nmapResult?.open_ports?.length" class="mt-2">
+                
+                <!-- Debug Information -->
+                <div v-if="nmapResult && debugMode" class="mt-2 p-2 bg-yellow-50 border rounded text-xs">
+                    <strong>Debug Info:</strong><br>
+                    Status: {{nmapResult.status}}<br>
+                    Open Ports Array Length: {{nmapResult.open_ports?.length || 0}}<br>
+                    Services Array Length: {{nmapResult.services?.length || 0}}<br>
+                    Raw Output Length: {{nmapResult.raw_output?.length || 0}} chars<br>
+                    <button @click="debugMode = !debugMode" class="text-blue-600 underline">Hide Debug</button>
+                </div>
+                <div v-else-if="nmapResult" class="mt-2">
+                    <button @click="debugMode = true" class="text-xs text-gray-500 underline">Show Debug Info</button>
+                </div>
+                
+                <!-- Nmap Results Display -->
+                <div v-if="nmapResult" class="mt-2">
+                    <!-- Scan Summary -->
                     <div class="mb-3 p-2 bg-blue-50 rounded">
                         <h3 class="font-bold text-blue-800">Scan Summary</h3>
                         <p class="text-sm text-blue-700">
-                            <strong>Total Open Ports:</strong> {{nmapResult.open_ports.length}} |
+                            <strong>Status:</strong> {{nmapResult.status}} |
+                            <strong>Total Open Ports:</strong> {{nmapResult.open_ports?.length || 0}} |
                             <strong>OS:</strong> {{nmapResult.os_detection?.name || 'Unknown'}} |
                             <strong>Domain Controller:</strong> {{nmapResult.os_detection?.is_domain_controller ? 'Yes' : 'No'}}
                         </p>
@@ -63,30 +80,82 @@
                         </div>
                     </div>
                     
-                    <table class="w-full text-sm border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="border p-2 text-left">Port</th>
-                                <th class="border p-2 text-left">Service</th>
-                                <th class="border p-2 text-left">Product</th>
-                                <th class="border p-2 text-left">Version</th>
-                                <th class="border p-2 text-left">Risk</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="p in nmapResult.open_ports" class="border-t hover:bg-gray-50">
-                                <td class="border p-2 font-mono">{{p.port}}</td>
-                                <td class="border p-2">{{p.service}}</td>
-                                <td class="border p-2 text-gray-600">{{p.product}}</td>
-                                <td class="border p-2 text-gray-500">{{p.version || '-'}}</td>
-                                <td class="border p-2">
-                                    <span :class="getPortRiskClass(p.port, p.service)" class="px-2 py-1 text-xs rounded text-white">
-                                        {{getPortRisk(p.port, p.service)}}
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <!-- Port Table or No Ports Message -->
+                    <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0">
+                        <table class="w-full text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="border p-2 text-left">Port</th>
+                                    <th class="border p-2 text-left">Service</th>
+                                    <th class="border p-2 text-left">Product</th>
+                                    <th class="border p-2 text-left">Version</th>
+                                    <th class="border p-2 text-left">Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="port in nmapResult.open_ports" :key="port.port" class="border-t hover:bg-gray-50">
+                                    <td class="border p-2 font-mono">{{port.port}}</td>
+                                    <td class="border p-2">{{port.service || 'unknown'}}</td>
+                                    <td class="border p-2 text-gray-600">{{port.product || '-'}}</td>
+                                    <td class="border p-2 text-gray-500">{{port.version || '-'}}</td>
+                                    <td class="border p-2">
+                                        <span :class="getPortRiskClass(port.port, port.service)" class="px-2 py-1 text-xs rounded text-white">
+                                            {{getPortRisk(port.port, port.service)}}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- No Ports Found Message -->
+                    <div v-else-if="nmapResult.status === 'completed'" class="mt-2 p-3 bg-gray-50 rounded border-l-4 border-yellow-400">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <span class="text-yellow-400">⚠️</span>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-gray-700">
+                                    <strong>No open ports detected</strong><br>
+                                    The target may be down, behind a firewall, or all ports are closed/filtered.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Scan Failed Message -->
+                    <div v-else-if="nmapResult.status === 'failed'" class="mt-2 p-3 bg-red-50 rounded border-l-4 border-red-400">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <span class="text-red-400">❌</span>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-red-700">
+                                    <strong>Scan failed</strong><br>
+                                    Please check the target IP address and try again.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Raw Output Section (Collapsible) -->
+                    <div v-if="nmapResult.raw_output" class="mt-3">
+                        <button @click="showRawOutput = !showRawOutput" 
+                                class="text-sm text-gray-600 hover:text-gray-800 underline">
+                            {{showRawOutput ? 'Hide' : 'Show'}} Raw Nmap Output
+                        </button>
+                        <div v-if="showRawOutput" class="mt-2 p-2 bg-gray-900 text-green-400 rounded text-xs overflow-auto max-h-64">
+                            <pre>{{nmapResult.raw_output}}</pre>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Scanning in Progress -->
+                <div v-else-if="currentStep === 'nmap'" class="mt-2 p-3 bg-blue-50 rounded">
+                    <div class="flex items-center">
+                        <div class="pulse-ani text-blue-600 mr-2">🔍</div>
+                        <span class="text-blue-800">Scanning ports...</span>
+                    </div>
                 </div>
             </div>
 
