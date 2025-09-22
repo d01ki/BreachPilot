@@ -11,7 +11,7 @@ createApp({
             selectedCves: [], pocSearchStarted: false, pocLimit: 4,
             expandedCves: {}, expandedCode: {}, expandedOutputs: {},
             debugMode: false, showRawOutput: false,
-            executingPocs: new Set(), // Track which PoCs are currently executing
+            executingPocs: new Set(),
         }
     },
     methods: {
@@ -40,19 +40,14 @@ createApp({
                 if (step === 'osint') { 
                     this.osintResult = res.data; 
                     this.osintComplete = true;
-                    console.log('OSINT completed:', this.osintResult);
                 }
                 if (step === 'nmap') { 
                     this.nmapResult = res.data; 
                     this.nmapComplete = true;
-                    console.log('Nmap completed:', this.nmapResult);
-                    console.log('Open ports:', this.nmapResult.open_ports);
-                    console.log('Status:', this.nmapResult.status);
                 }
                 if (step === 'analyze') { 
                     this.analystResult = res.data; 
                     this.analysisComplete = true;
-                    console.log('Analysis completed:', this.analystResult);
                 }
                 this.currentStep = '';
             } catch (error) {
@@ -81,8 +76,8 @@ createApp({
                 
                 // Log summary
                 const totalPocs = this.getTotalPoCs();
-                const pocsWithCode = this.getPocsWithCode();
-                console.log(`PoC Search Summary: ${totalPocs} total PoCs, ${pocsWithCode} with code`);
+                const githubRepos = this.getGitHubRepos();
+                console.log(`PoC Search Summary: ${totalPocs} total PoCs, ${githubRepos} GitHub repositories`);
                 
                 this.currentStep = '';
             } catch (error) {
@@ -95,13 +90,13 @@ createApp({
         async executeSinglePoc(cveId, pocIndex) {
             const pocKey = `${cveId}_${pocIndex}`;
             if (this.executingPocs.has(pocKey)) {
-                return; // Already executing
+                return;
             }
             
             this.executingPocs.add(pocKey);
             
             try {
-                console.log(`Executing single PoC: ${cveId} #${pocIndex}`);
+                console.log(`Executing single PoC via git clone: ${cveId} #${pocIndex}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -111,14 +106,12 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/by_index`, payload);
                 
-                console.log(`PoC execution result:`, res.data);
+                console.log(`Git clone execution result:`, res.data);
                 
-                // Update or add the result
                 this.updateExploitResult(res.data);
                 
-                // Show success/failure notification
                 if (res.data.success) {
-                    this.showNotification(`✅ ${cveId} PoC #${pocIndex + 1} executed successfully!`, 'success');
+                    this.showNotification(`✅ ${cveId} PoC #${pocIndex + 1} executed successfully via git clone!`, 'success');
                 } else {
                     this.showNotification(`❌ ${cveId} PoC #${pocIndex + 1} failed: ${res.data.failure_reason || 'Unknown error'}`, 'error');
                 }
@@ -133,7 +126,7 @@ createApp({
         
         async executeAllPocs(cveId) {
             try {
-                console.log(`Executing all PoCs for: ${cveId}`);
+                console.log(`Executing all PoCs via git clone for: ${cveId}`);
                 
                 const payload = {
                     cve_id: cveId,
@@ -142,14 +135,12 @@ createApp({
                 
                 const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/multi`, payload);
                 
-                console.log(`Multi-PoC execution results:`, res.data);
+                console.log(`Multi-PoC git clone execution results:`, res.data);
                 
-                // Update results
                 res.data.forEach(result => this.updateExploitResult(result));
                 
-                // Show summary notification
                 const successful = res.data.filter(r => r.success).length;
-                const message = `${cveId}: ${successful}/${res.data.length} PoCs executed successfully`;
+                const message = `${cveId}: ${successful}/${res.data.length} PoCs executed successfully via git clone`;
                 this.showNotification(message, successful > 0 ? 'success' : 'error');
                 
             } catch (error) {
@@ -159,20 +150,16 @@ createApp({
         },
         
         updateExploitResult(newResult) {
-            // Find existing result with same CVE and PoC index
             const existingIndex = this.exploitResults.findIndex(r => 
                 r.cve_id === newResult.cve_id && r.poc_index === newResult.poc_index
             );
             
             if (existingIndex >= 0) {
-                // Update existing result
                 this.exploitResults[existingIndex] = newResult;
             } else {
-                // Add new result
                 this.exploitResults.push(newResult);
             }
             
-            // Sort results by timestamp (newest first)
             this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         },
         
@@ -185,7 +172,7 @@ createApp({
         async cleanupFiles() {
             try {
                 await axios.delete(`${API_URL}/api/scan/${this.sessionId}/exploit_files?keep_successful=true`);
-                this.showNotification('✅ Exploit files cleaned up successfully', 'success');
+                this.showNotification('✅ Temporary git repositories cleaned up successfully', 'success');
             } catch (error) {
                 console.error('File cleanup failed:', error);
                 this.showNotification('❌ File cleanup failed', 'error');
@@ -223,7 +210,6 @@ createApp({
         },
         
         showNotification(message, type = 'info') {
-            // Simple notification system - could be enhanced with a proper toast library
             const notification = document.createElement('div');
             notification.className = `fixed top-4 right-4 p-3 rounded shadow-lg z-50 ${
                 type === 'success' ? 'bg-green-500 text-white' :
@@ -249,7 +235,7 @@ createApp({
         
         getSourceBadgeClass(source) {
             const classes = {
-                'GitHub': 'bg-gray-800 text-white',
+                'GitHub Repository': 'bg-gray-800 text-white',
                 'GitHub Code': 'bg-gray-700 text-white',
                 'ExploitDB': 'bg-red-600 text-white',
                 'PacketStorm': 'bg-orange-600 text-white'
@@ -261,9 +247,9 @@ createApp({
             return this.pocResults.reduce((total, result) => total + result.available_pocs.length, 0);
         },
         
-        getPocsWithCode() {
+        getGitHubRepos() {
             return this.pocResults.reduce((total, result) => 
-                total + result.available_pocs.filter(poc => poc.code).length, 0);
+                total + result.available_pocs.filter(poc => poc.source === 'GitHub Repository').length, 0);
         },
         
         toggleCode(cveId, pocIndex) {
@@ -285,7 +271,6 @@ createApp({
                 const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
                 const r = res.data;
                 
-                // Update results with better state management
                 if (r.osint_result && !this.osintComplete) {
                     this.osintResult = r.osint_result;
                     this.osintComplete = true;
@@ -293,14 +278,12 @@ createApp({
                 if (r.nmap_result && !this.nmapComplete) {
                     this.nmapResult = r.nmap_result;
                     this.nmapComplete = true;
-                    console.log('Nmap result loaded from polling:', this.nmapResult);
                 }
                 if (r.analyst_result && !this.analysisComplete) {
                     this.analystResult = r.analyst_result;
                     this.analysisComplete = true;
                 }
                 if (r.poc_results) {
-                    // Only update if we haven't started PoC search or if results are different
                     if (!this.pocSearchStarted || JSON.stringify(r.poc_results) !== JSON.stringify(this.pocResults)) {
                         this.pocResults = r.poc_results;
                         if (r.poc_results.length > 0) {
@@ -309,7 +292,6 @@ createApp({
                     }
                 }
                 if (r.exploit_results) {
-                    // Merge exploit results intelligently
                     r.exploit_results.forEach(newResult => {
                         const existingIndex = this.exploitResults.findIndex(existing => 
                             existing.cve_id === newResult.cve_id && 
@@ -322,12 +304,10 @@ createApp({
                         }
                     });
                     
-                    // Sort by timestamp
                     this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                 }
             } catch (error) {
                 console.error('Failed to load results:', error);
-                // Don't show alert for polling errors to avoid spam
             }
         },
         
@@ -350,7 +330,6 @@ createApp({
         formatCveExplanation(explanation) {
             if (!explanation) return '';
             
-            // Convert markdown-like formatting to HTML
             return explanation
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -399,13 +378,11 @@ createApp({
     },
     
     mounted() {
-        // Enable debug mode if URL contains debug parameter
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('debug') === 'true') {
             this.debugMode = true;
         }
         
-        // Load session from URL if provided
         const sessionFromUrl = urlParams.get('session');
         if (sessionFromUrl) {
             this.sessionId = sessionFromUrl;
