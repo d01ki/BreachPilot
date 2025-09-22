@@ -63,6 +63,14 @@ class PoCInfo(BaseModel):
     author: str = ""
     stars: int = 0
     code: str = ""
+    # New fields for enhanced PoC management
+    filename: Optional[str] = None
+    execution_command: Optional[str] = None
+    file_extension: Optional[str] = None
+    code_language: Optional[str] = None
+    estimated_success_rate: Optional[float] = None
+    requires_dependencies: bool = False
+    dependencies: List[str] = Field(default_factory=list)
 
 class PoCResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -70,6 +78,10 @@ class PoCResult(BaseModel):
     available_pocs: List[PoCInfo] = Field(default_factory=list)
     selected_poc: Optional[PoCInfo] = None
     status: StepStatus = StepStatus.PENDING
+    # Enhanced fields
+    total_found: int = 0
+    with_code: int = 0
+    search_duration: Optional[float] = None
 
 class ExploitResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -80,6 +92,16 @@ class ExploitResult(BaseModel):
     success: bool = False
     artifacts_captured: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
+    # New enhanced fields for multi-PoC support
+    poc_index: Optional[int] = None
+    poc_source: Optional[str] = None
+    poc_url: Optional[str] = None
+    execution_time: Optional[float] = None
+    execution_command: Optional[str] = None
+    failure_reason: Optional[str] = None
+    success_indicators: List[str] = Field(default_factory=list)
+    exploit_filename: Optional[str] = None
+    return_code: Optional[int] = None
 
 class ReportData(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
