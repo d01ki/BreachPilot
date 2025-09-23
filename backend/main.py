@@ -167,6 +167,32 @@ async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Bo
         logger.error(f"PoC by index execution failed for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/zerologon/execute")
+async def execute_zerologon_poc(payload: Dict[str, Any] = Body(...)):
+    """Execute CVE-2020-1472 (Zerologon) PoC"""
+    try:
+        target_ip = payload.get('target_ip')
+        dc_name = payload.get('dc_name', 'DC01')  # Default DC name
+        
+        if not target_ip:
+            raise HTTPException(status_code=400, detail="Missing target IP")
+        
+        logger.info(f"Executing Zerologon PoC against {target_ip} (DC: {dc_name})")
+        
+        # Import zerologon executor
+        from backend.exploiter.zerologon_executor import ZerologonExecutor
+        
+        executor = ZerologonExecutor()
+        result = executor.execute_zerologon(target_ip, dc_name)
+        
+        logger.info(f"Zerologon execution completed: {'SUCCESS' if result['success'] else 'FAILED'}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Zerologon execution failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/scan/{session_id}/exploits/{cve_id}")
 async def get_exploit_results_by_cve(session_id: str, cve_id: str):
     """Get all exploit results for a specific CVE"""
