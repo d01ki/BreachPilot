@@ -52,279 +52,180 @@ class PoCCrew:
         start_time = time.time()
         
         try:
-            # Create specialized AI agents
-            poc_hunter = Agent(
-                role='PoC Hunter Agent',
-                goal=f'Find the best proof-of-concept exploits for {cve_id}',
-                backstory="""You are an elite cybersecurity researcher specializing in exploit hunting.
-                Your expertise lies in finding high-quality, working proof-of-concept exploits from
-                GitHub, ExploitDB, and other security repositories. You prioritize:
-                1. GitHub repositories with specific CVE names
-                2. Recent, actively maintained repositories
-                3. Repositories with clear documentation
-                4. Code that appears to be functional and well-written""",
-                llm=self.llm,
-                verbose=True
-            )
-            
-            quality_analyzer = Agent(
-                role='PoC Quality Analyst',
-                goal=f'Analyze and rank PoC exploits for {cve_id} by quality and reliability',
-                backstory="""You are a senior penetration tester with expertise in evaluating
-                exploit quality. You can assess PoC exploits based on:
-                1. Code quality and completeness
-                2. Repository maintenance and community trust
-                3. Compatibility and likelihood of success
-                4. Documentation and usage clarity""",
-                llm=self.llm,
-                verbose=False
-            )
-            
-            # Create tasks
-            hunt_task = Task(
-                description=f"""Find the best PoC exploits for {cve_id}.
-                
-                Search Strategy:
-                1. Look for GitHub repositories with exact CVE ID in name or description
-                2. Search for recent, well-maintained repositories
-                3. Find ExploitDB entries for this CVE
-                4. Look for specific exploit files (.py, .sh, .c, etc.)
-                
-                Focus on quality over quantity. Find {limit} high-quality PoCs that:
-                - Are specifically for {cve_id} (not generic collections)
-                - Have clear, working code
-                - Are from reputable sources
-                - Have good documentation or comments
-                
-                Return a structured list of the best PoCs found.""",
-                agent=poc_hunter,
-                expected_output=f"A detailed list of {limit} high-quality PoC exploits for {cve_id}"
-            )
-            
-            analyze_task = Task(
-                description=f"""Analyze the PoC exploits found for {cve_id} and rank them by quality.
-                
-                Evaluation Criteria:
-                1. Code Quality: Is the code well-written and complete?
-                2. Specificity: Is it specifically for {cve_id}?
-                3. Recency: How recent is the repository/code?
-                4. Community Trust: Stars, forks, contributor reputation
-                5. Documentation: Clear instructions and comments
-                6. Functionality: Does it look like it would work?
-                
-                Rank the PoCs from best to worst and explain why each one is valuable.""",
-                agent=quality_analyzer,
-                expected_output=f"Ranked analysis of PoC exploits for {cve_id} with quality scores"
-            )
-            
-            # Execute AI crew
-            crew = Crew(
-                agents=[poc_hunter, quality_analyzer],
-                tasks=[hunt_task, analyze_task],
-                process=Process.sequential,
-                verbose=True
-            )
-            
-            logger.info(f"🤖 AI Crew starting analysis for {cve_id}...")
-            crew_result = crew.kickoff()
-            
-            # Parse AI results and combine with direct search
-            ai_recommendations = self._parse_ai_recommendations(str(crew_result), cve_id)
+            # Direct search first (faster)
             direct_results = self._direct_search_enhanced(cve_id, limit)
             
-            # Combine and deduplicate
-            all_pocs = ai_recommendations + direct_results
-            unique_pocs = self._deduplicate_and_filter_quality(all_pocs, cve_id)
+            # Enhance with code content
+            enhanced_pocs = self._enhance_pocs_with_code(direct_results, cve_id)
             
-            # Final AI-assisted ranking
-            final_pocs = self._ai_rank_final_pocs(unique_pocs, cve_id, limit)
+            # Manual ranking
+            final_pocs = self._manual_rank_pocs(enhanced_pocs, cve_id)[:limit]
             
             search_duration = round(time.time() - start_time, 2)
-            logger.info(f"🎯 AI-enhanced search completed in {search_duration}s")
+            logger.info(f"🎯 Enhanced search completed in {search_duration}s")
             
             return final_pocs
             
         except Exception as e:
-            logger.error(f"AI-enhanced PoC search failed for {cve_id}: {e}")
-            # Fallback to direct search
-            return self._direct_search_enhanced(cve_id, limit)
+            logger.error(f"Enhanced PoC search failed for {cve_id}: {e}")
+            # Fallback to basic search
+            return self._direct_search_enhanced(cve_id, limit)[:limit]
     
-    def _parse_ai_recommendations(self, ai_result: str, cve_id: str) -> List[PoCInfo]:
-        """Parse AI agent recommendations into PoC objects"""
-        pocs = []
+    def _enhance_pocs_with_code(self, pocs: List[PoCInfo], cve_id: str) -> List[PoCInfo]:
+        """Enhance PoCs by fetching actual code content"""
+        enhanced_pocs = []
         
-        # Extract GitHub URLs from AI response
-        github_urls = re.findall(r'https://github\.com/[\w\-\.]+/[\w\-\.]+', ai_result)
-        
-        # Extract ExploitDB URLs
-        exploitdb_urls = re.findall(r'https://www\.exploit-db\.com/exploits/\d+', ai_result)
-        
-        # Process GitHub URLs
-        for url in github_urls:
-            if len(pocs) >= 10:  # Limit AI recommendations
-                break
+        for poc in pocs:
             try:
-                # Get repository info
-                repo_info = self._get_github_repo_info(url)
-                if repo_info and self._validate_ai_recommendation(repo_info, cve_id, ai_result):
-                    poc = PoCInfo(
-                        source='AI Recommended GitHub',
-                        url=url,
-                        description=repo_info.get('description', f'AI-recommended PoC for {cve_id}'),
-                        author=repo_info.get('owner', {}).get('login', 'Unknown'),
-                        stars=repo_info.get('stargazers_count', 0),
-                        code="",
-                        ai_recommended=True,
-                        ai_confidence=self._extract_ai_confidence(url, ai_result)
-                    )
-                    pocs.append(poc)
+                # Try to fetch code content
+                if 'github.com' in poc.url:
+                    code_content = self._fetch_github_code(poc.url, cve_id)
+                    if code_content:
+                        poc.code = code_content
+                        poc.execution_command = self._generate_execution_command(poc.url, code_content)
+                elif 'exploit-db.com' in poc.url:
+                    code_content = self._fetch_exploitdb_code(poc.url)
+                    if code_content:
+                        poc.code = code_content
+                        poc.execution_command = self._generate_execution_command(poc.url, code_content)
+                
+                enhanced_pocs.append(poc)
+                
             except Exception as e:
-                logger.debug(f"Failed to process AI recommendation {url}: {e}")
+                logger.debug(f"Failed to enhance PoC {poc.url}: {e}")
+                enhanced_pocs.append(poc)  # Add without code if fetching fails
         
-        # Process ExploitDB URLs
-        for url in exploitdb_urls:
-            if len(pocs) >= 10:
-                break
-            poc = PoCInfo(
-                source='AI Recommended ExploitDB',
-                url=url,
-                description=f'AI-recommended ExploitDB exploit for {cve_id}',
-                author='ExploitDB Community',
-                stars=0,
-                code="",
-                ai_recommended=True,
-                ai_confidence=self._extract_ai_confidence(url, ai_result)
-            )
-            pocs.append(poc)
-        
-        logger.info(f"🤖 AI Agent extracted {len(pocs)} recommendations from analysis")
-        return pocs
+        return enhanced_pocs
     
-    def _validate_ai_recommendation(self, repo_info: Dict, cve_id: str, ai_result: str) -> bool:
-        """Validate if AI recommendation is actually good"""
-        repo_name = repo_info.get('name', '').lower()
-        description = repo_info.get('description', '').lower()
-        
-        # Must mention CVE
-        if cve_id.lower() not in repo_name and cve_id.lower() not in description:
-            return False
-        
-        # Check if AI mentioned why it's good
-        repo_url = repo_info.get('html_url', '')
-        if repo_url in ai_result:
-            # Look for positive AI keywords around this URL
-            url_context = ai_result[max(0, ai_result.find(repo_url) - 200):ai_result.find(repo_url) + 200]
-            positive_indicators = ['high quality', 'well maintained', 'good documentation', 'working', 'reliable', 'recommended']
-            if any(indicator in url_context.lower() for indicator in positive_indicators):
-                return True
-        
-        return False
-    
-    def _extract_ai_confidence(self, url: str, ai_result: str) -> float:
-        """Extract AI confidence score from analysis text"""
-        if url in ai_result:
-            # Look for confidence indicators
-            url_context = ai_result[max(0, ai_result.find(url) - 100):ai_result.find(url) + 100].lower()
-            
-            if 'excellent' in url_context or 'best' in url_context:
-                return 0.95
-            elif 'good' in url_context or 'quality' in url_context:
-                return 0.85
-            elif 'recommended' in url_context:
-                return 0.75
-            else:
-                return 0.65
-        
-        return 0.6
-    
-    def _get_github_repo_info(self, url: str) -> Dict:
-        """Get GitHub repository information"""
+    def _fetch_github_code(self, github_url: str, cve_id: str) -> str:
+        """Fetch code content from GitHub repository"""
         try:
-            # Extract owner/repo from URL
-            parts = url.replace('https://github.com/', '').split('/')
-            if len(parts) >= 2:
-                owner, repo = parts[0], parts[1]
-                api_url = f'https://api.github.com/repos/{owner}/{repo}'
+            # Extract repo info
+            url_parts = github_url.replace('https://github.com/', '').split('/')
+            if len(url_parts) >= 2:
+                owner, repo = url_parts[0], url_parts[1]
                 
+                # Search for PoC files in the repository
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
                 headers = {'Accept': 'application/vnd.github.v3+json'}
-                response = requests.get(api_url, headers=headers, timeout=10)
                 
+                response = requests.get(api_url, headers=headers, timeout=10)
                 if response.status_code == 200:
-                    return response.json()
+                    files = response.json()
+                    
+                    # Look for main PoC files
+                    poc_file = self._find_main_poc_file(files, cve_id)
+                    if poc_file:
+                        # Fetch file content
+                        file_response = requests.get(poc_file['download_url'], timeout=10)
+                        if file_response.status_code == 200:
+                            content = file_response.text
+                            if len(content) < 10000:  # Limit code size for display
+                                return content
+                            else:
+                                return content[:10000] + "\n\n... (truncated for display)"
+                
         except Exception as e:
-            logger.debug(f"Failed to get repo info for {url}: {e}")
+            logger.debug(f"Failed to fetch GitHub code from {github_url}: {e}")
+        
+        return ""
+    
+    def _find_main_poc_file(self, files: List[Dict], cve_id: str) -> Dict:
+        """Find the main PoC file in a GitHub repository"""
+        # Priority order for file matching
+        priority_patterns = [
+            cve_id.lower(),
+            cve_id.replace('-', '_').lower(),
+            'exploit',
+            'poc',
+            'main'
+        ]
+        
+        # Preferred extensions
+        preferred_extensions = ['.py', '.sh', '.rb', '.c', '.cpp']
+        
+        scored_files = []
+        
+        for file in files:
+            if file.get('type') == 'file':
+                filename = file.get('name', '').lower()
+                score = 0
+                
+                # Score based on filename patterns
+                for i, pattern in enumerate(priority_patterns):
+                    if pattern in filename:
+                        score += (len(priority_patterns) - i) * 10
+                
+                # Score based on file extension
+                for ext in preferred_extensions:
+                    if filename.endswith(ext):
+                        score += 5
+                        break
+                
+                # Penalties
+                if any(avoid in filename for avoid in ['readme', 'license', 'test']):
+                    score -= 20
+                
+                if score > 0:
+                    scored_files.append((score, file))
+        
+        # Return highest scoring file
+        if scored_files:
+            scored_files.sort(key=lambda x: x[0], reverse=True)
+            return scored_files[0][1]
         
         return None
     
-    def _ai_rank_final_pocs(self, pocs: List[PoCInfo], cve_id: str, limit: int) -> List[PoCInfo]:
-        """Use AI to do final ranking of PoCs"""
-        if len(pocs) <= limit:
-            return pocs
-        
+    def _fetch_exploitdb_code(self, exploitdb_url: str) -> str:
+        """Fetch code from ExploitDB"""
         try:
-            # Create ranking agent
-            ranker = Agent(
-                role='PoC Ranking Specialist',
-                goal=f'Rank PoC exploits for {cve_id} in order of likely success',
-                backstory="""You are an expert at evaluating cybersecurity exploits and determining
-                which ones are most likely to work in real penetration testing scenarios.""",
-                llm=self.llm,
-                verbose=False
-            )
-            
-            # Prepare PoC summaries for AI
-            poc_summaries = []
-            for i, poc in enumerate(pocs):
-                summary = f"""PoC #{i+1}:
-                Source: {poc.source}
-                URL: {poc.url}
-                Description: {poc.description}
-                Author: {poc.author}
-                Stars: {poc.stars}
-                AI Recommended: {getattr(poc, 'ai_recommended', False)}"""
-                poc_summaries.append(summary)
-            
-            rank_task = Task(
-                description=f"""Rank these {len(pocs)} PoC exploits for {cve_id} in order of likely success.
-                Consider: code quality, source reliability, community trust, and specificity to {cve_id}.
+            # Convert web URL to raw URL
+            exploit_id = re.search(r'/exploits/(\d+)', exploitdb_url)
+            if exploit_id:
+                raw_url = f"https://www.exploit-db.com/raw/{exploit_id.group(1)}"
                 
-                PoCs to rank:
-                {chr(10).join(poc_summaries)}
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (compatible; BreachPilot)'
+                }
                 
-                Return just the numbers (e.g., "3,1,5,2,4") for the ranking from best to worst.""",
-                agent=ranker,
-                expected_output="Comma-separated ranking numbers"
-            )
-            
-            crew = Crew(agents=[ranker], tasks=[rank_task], process=Process.sequential, verbose=False)
-            result = crew.kickoff()
-            
-            # Parse ranking
-            ranking_str = str(result).strip()
-            ranking_match = re.search(r'[\d,\s]+', ranking_str)
-            
-            if ranking_match:
-                ranking_numbers = [int(x.strip()) for x in ranking_match.group().split(',') if x.strip().isdigit()]
+                response = requests.get(raw_url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    content = response.text
+                    if len(content) < 10000:
+                        return content
+                    else:
+                        return content[:10000] + "\n\n... (truncated for display)"
                 
-                # Apply ranking
-                ranked_pocs = []
-                for rank_num in ranking_numbers:
-                    if 1 <= rank_num <= len(pocs):
-                        ranked_pocs.append(pocs[rank_num - 1])
-                
-                # Add any missing PoCs
-                for poc in pocs:
-                    if poc not in ranked_pocs:
-                        ranked_pocs.append(poc)
-                
-                logger.info(f"🤖 AI Agent ranked {len(ranked_pocs)} PoCs for {cve_id}")
-                return ranked_pocs[:limit]
-        
         except Exception as e:
-            logger.debug(f"AI ranking failed: {e}")
+            logger.debug(f"Failed to fetch ExploitDB code from {exploitdb_url}: {e}")
         
-        # Fallback to manual ranking
-        return self._manual_rank_pocs(pocs, cve_id)[:limit]
+        return ""
+    
+    def _generate_execution_command(self, url: str, code: str) -> str:
+        """Generate execution command based on URL and code content"""
+        try:
+            if 'github.com' in url:
+                if code.startswith('#!/usr/bin/env python') or code.startswith('#!/usr/bin/python') or 'import ' in code[:200]:
+                    return f"python3 exploit.py <target_ip>"
+                elif code.startswith('#!/bin/bash') or code.startswith('#!/bin/sh') or 'bash' in code[:100]:
+                    return f"bash exploit.sh <target_ip>"
+                elif '#include' in code[:200] or 'int main' in code:
+                    return f"gcc -o exploit exploit.c && ./exploit <target_ip>"
+                else:
+                    return f"./exploit <target_ip>"
+            
+            elif 'exploit-db.com' in url:
+                if 'python' in code[:200].lower() or 'import ' in code[:200]:
+                    return f"python3 exploit.py <target_ip>"
+                elif 'bash' in code[:200].lower() or '#!/bin/' in code[:50]:
+                    return f"bash exploit.sh <target_ip>"
+                else:
+                    return f"./exploit <target_ip>"
+            
+            return "See repository instructions"
+            
+        except Exception:
+            return "Manual execution required"
     
     def _manual_rank_pocs(self, pocs: List[PoCInfo], cve_id: str) -> List[PoCInfo]:
         """Manual ranking as fallback"""
@@ -351,6 +252,10 @@ class PoCCrew:
                 score += 200
             if cve_id.lower() in poc.description.lower():
                 score += 100
+            
+            # Has code bonus
+            if poc.code and poc.code.strip():
+                score += 150
             
             # Stars
             score += min(poc.stars * 2, 50)
@@ -505,7 +410,7 @@ class PoCCrew:
             response = requests.get(search_url, headers=headers, timeout=15)
             
             if response.status_code == 200:
-                exploit_ids = re.findall(r'/exploits/(\\d+)', response.text)
+                exploit_ids = re.findall(r'/exploits/(\d+)', response.text)
                 
                 for exploit_id in exploit_ids[:limit]:
                     exploit_url = f'https://www.exploit-db.com/exploits/{exploit_id}'
@@ -592,7 +497,7 @@ class PoCCrew:
         if not description:
             return "PoC exploit repository"
         
-        if len(re.findall(r'[\\u4e00-\\u9fff]', description)) > len(description) * 0.3:
+        if len(re.findall(r'[\u4e00-\u9fff]', description)) > len(description) * 0.3:
             return "PoC exploit repository"
         
         if len(description) > 200:
