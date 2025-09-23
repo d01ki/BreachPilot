@@ -12,6 +12,7 @@ createApp({
             debugMode: false,
             showRawOutput: false,
             expandedCves: {},
+            autoScanActive: false,
             
             // PoC Search functionality
             selectedCves: [],
@@ -34,15 +35,62 @@ createApp({
         async startScan() {
             if (!this.targetIp) return;
             
+            this.autoScanActive = true;
             try {
                 const response = await axios.post('/api/scan/start', {
                     target_ip: this.targetIp
                 });
                 this.sessionId = response.data.session_id;
-                console.log('Scan started:', this.sessionId);
+                console.log('🚀 Auto-scan started:', this.sessionId);
+                
+                // Start polling for auto-scan results
+                this.pollResults();
             } catch (error) {
                 console.error('Error starting scan:', error);
                 alert('Failed to start scan');
+                this.autoScanActive = false;
+            }
+        },
+        
+        async pollResults() {
+            if (!this.sessionId) return;
+            
+            try {
+                const response = await axios.get(`/api/scan/${this.sessionId}/results`);
+                const data = response.data;
+                
+                // Update results as they become available
+                if (data.osint_result && !this.osintResult) {
+                    this.osintResult = data.osint_result;
+                    console.log('✅ OSINT completed automatically');
+                }
+                
+                if (data.nmap_result && !this.nmapResult) {
+                    this.nmapResult = data.nmap_result;
+                    console.log('✅ Nmap completed automatically');
+                }
+                
+                // Update current step based on session status
+                if (data.current_step) {
+                    this.currentStep = data.current_step;
+                }
+                
+                // Stop auto-scan when both OSINT and Nmap are complete
+                if (this.osintResult && this.nmapResult) {
+                    this.autoScanActive = false;
+                    this.currentStep = 'analysis';
+                    console.log('🎉 Auto-scan completed! Ready for CVE analysis.');
+                    return;
+                }
+                
+                // Continue polling if auto-scan is still active
+                if (this.autoScanActive) {
+                    setTimeout(() => this.pollResults(), 2000);
+                }
+                
+            } catch (error) {
+                console.error('Error polling results:', error);
+                this.autoScanActive = false;
             }
         },
         
@@ -73,6 +121,64 @@ createApp({
             }
         },
         
+        // Enhanced Service Info extraction
+        getServiceInfo(nmapResult) {
+            if (!nmapResult || !nmapResult.raw_output) return null;
+            
+            // Extract Service Info line from raw output
+            const match = nmapResult.raw_output.match(/Service Info:\s*(.+?)(?:\n|$)/);
+            if (match) {
+                const serviceInfo = match[1].trim();
+                // Format service info with icons and better display
+                return serviceInfo
+                    .replace(/Host:\s*([^;]+)/g, '<strong>🖥️ Host:</strong> $1')
+                    .replace(/OS:\s*([^;]+)/g, '<strong>💻 OS:</strong> $1')
+                    .replace(/CPE:\s*([^;]+)/g, '<strong>🔧 CPE:</strong> <code class="text-xs">$1</code>');
+            }
+            return null;
+        },
+        
+        getOSInfo(nmapResult) {
+            if (nmapResult?.os_detection?.name) {
+                return nmapResult.os_detection.name;
+            }
+            
+            // Extract from Service Info as fallback
+            if (nmapResult?.raw_output) {
+                const match = nmapResult.raw_output.match(/OS:\s*([^;,\n]+)/);
+                if (match) {
+                    return match[1].trim();
+                }
+            }
+            
+            return 'Unknown';
+        },
+        
+        isDomainController(nmapResult) {
+            // Check explicit DC detection
+            if (nmapResult?.os_detection?.is_domain_controller) {
+                return true;
+            }
+            
+            // Check for common DC indicators in raw output
+            if (nmapResult?.raw_output) {
+                const dcIndicators = [
+                    /microsoft.*windows.*server/i,
+                    /domain.*controller/i,
+                    /active.*directory/i,
+                    /ldap/i,
+                    /kerberos/i,
+                    /port.*389.*open/i,  // LDAP
+                    /port.*636.*open/i,  // LDAPS
+                    /port.*88.*open/i    // Kerberos
+                ];
+                
+                return dcIndicators.some(pattern => pattern.test(nmapResult.raw_output));
+            }
+            
+            return false;
+        },
+        
         // PoC Search Methods
         getSelectedCves() {
             return this.selectedCves;
@@ -91,7 +197,13 @@ createApp({
                     limit: 4
                 });
                 this.pocResults = response.data;
-                console.log('PoC search results:', this.pocResults);
+                console.log('🔍 PoC search results:', this.pocResults);
+                
+                // Show notification for Zerologon auto-preparation
+                const zerologonResult = this.pocResults.find(r => r.cve_id === 'CVE-2020-1472');
+                if (zerologonResult && zerologonResult.available_pocs.some(p => p.source === 'BreachPilot Built-in')) {
+                    console.log('🎯 Zerologon PoC auto-prepared and ready!');
+                }
             } catch (error) {
                 console.error('Error searching PoCs:', error);
                 alert('Failed to search PoCs');
@@ -118,7 +230,13 @@ createApp({
                     poc_index: pocIndex
                 });
                 
-                console.log('PoC execution result:', response.data);
+                console.log('🎯 PoC execution result:', response.data);
+                
+                // Special logging for Zerologon
+                if (cveId === 'CVE-2020-1472') {
+                    console.log('🏰 Zerologon execution completed!', response.data.success ? 'VULNERABLE!' : 'Not vulnerable');
+                }
+                
             } catch (error) {
                 console.error('Error executing PoC:', error);
                 alert('Failed to execute PoC');
@@ -161,12 +279,32 @@ createApp({
             this.expandedCves[cveId] = !this.expandedCves[cveId];
         },
         
+        // Enhanced CVE Link Utilities
+        getLinkClass(linkName) {
+            const name = linkName.toLowerCase();
+            if (name.includes('nvd')) return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
+            if (name.includes('mitre')) return 'bg-purple-100 text-purple-800 hover:bg-purple-200';
+            if (name.includes('exploit')) return 'bg-red-100 text-red-800 hover:bg-red-200';
+            if (name.includes('cve')) return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
+            return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
+        },
+        
+        getLinkIcon(linkName) {
+            const name = linkName.toLowerCase();
+            if (name.includes('nvd')) return '🛡️';
+            if (name.includes('mitre')) return '⚡';
+            if (name.includes('exploit')) return '💥';
+            if (name.includes('cve')) return '🔍';
+            return '🔗';
+        },
+        
         // Utility Methods
         getCvssClass(score) {
-            if (score >= 9.0) return 'bg-red-600';
-            if (score >= 7.0) return 'bg-red-500';
-            if (score >= 4.0) return 'bg-yellow-500';
-            return 'bg-green-500';
+            if (!score) return 'cvss-info';
+            if (score >= 9.0) return 'cvss-critical';
+            if (score >= 7.0) return 'cvss-high';
+            if (score >= 4.0) return 'cvss-medium';
+            return 'cvss-low';
         },
         
         getPortRisk(port, service) {
@@ -194,11 +332,12 @@ createApp({
             let formatted = explanation
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded">$1</code>')
-                .replace(/\n\n/g, '</p><p class="mt-2">')
+                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded text-xs">$1</code>')
+                .replace(/\n\n/g, '</p><p class="mt-3">')
+                .replace(/\n-\s/g, '<br>• ')
                 .replace(/\n/g, '<br>');
             
-            return `<p>${formatted}</p>`;
+            return `<p class="leading-relaxed">${formatted}</p>`;
         },
         
         formatTimestamp(timestamp) {
@@ -248,6 +387,7 @@ createApp({
             this.debugMode = false;
             this.showRawOutput = false;
             this.expandedCves = {};
+            this.autoScanActive = false;
             
             // Reset PoC data
             this.selectedCves = [];
@@ -261,11 +401,6 @@ createApp({
     },
     
     mounted() {
-        console.log('BreachPilot frontend loaded');
-        
-        // Auto-refresh session status if we have a session
-        if (this.sessionId) {
-            setInterval(this.checkSessionStatus, 2000);
-        }
+        console.log('🛡️ BreachPilot frontend loaded with enhanced features');
     }
 }).mount('#app');
