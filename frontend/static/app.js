@@ -14,6 +14,11 @@ createApp({
             executingPocs: new Set(),
             aiAgentStatus: 'Idle',  // Track AI agent status
             pocSearchProgress: '',  // Track search progress
+            // Zerologon specific data
+            zerologonDcName: 'DC01',
+            zerologonExecuting: false,
+            zerologonResult: null,
+            showZerologonOutput: false,
         }
     },
     methods: {
@@ -58,6 +63,133 @@ createApp({
                 this.currentStep = '';
                 alert(`${step} failed: ` + (error.response?.data?.detail || error.message));
             }
+        },
+        
+        async executeZerologon() {
+            if (!this.targetIp || this.zerologonExecuting) return;
+            
+            this.zerologonExecuting = true;
+            console.log(`🚀 Executing Zerologon PoC against ${this.targetIp} (DC: ${this.zerologonDcName})`);
+            
+            try {
+                const payload = {
+                    target_ip: this.targetIp,
+                    dc_name: this.zerologonDcName || 'DC01'
+                };
+                
+                const res = await axios.post(`${API_URL}/api/zerologon/execute`, payload);
+                
+                console.log(`🎯 Zerologon execution result:`, res.data);
+                this.zerologonResult = res.data;
+                
+                if (res.data.success) {
+                    this.showNotification(`🚨 WARNING: Target is VULNERABLE to Zerologon!`, 'error');
+                    this.createZerologonSuccessEffect();
+                } else {
+                    this.showNotification(`✅ Target is NOT vulnerable to Zerologon`, 'success');
+                }
+                
+            } catch (error) {
+                console.error(`❌ Zerologon execution failed:`, error);
+                this.showNotification(`❌ Zerologon test failed: ${error.response?.data?.detail || error.message}`, 'error');
+                
+                // Create error result object
+                this.zerologonResult = {
+                    cve_id: "CVE-2020-1472",
+                    target_ip: this.targetIp,
+                    dc_name: this.zerologonDcName,
+                    success: false,
+                    execution_output: `Error: ${error.response?.data?.detail || error.message}`,
+                    timestamp: Date.now() / 1000,
+                    execution_time: 0,
+                    vulnerability_confirmed: false,
+                    exploit_successful: false,
+                    artifacts: ["Error occurred during execution"]
+                };
+            } finally {
+                this.zerologonExecuting = false;
+            }
+        },
+        
+        toggleZerologonOutput() {
+            this.showZerologonOutput = !this.showZerologonOutput;
+        },
+        
+        createZerologonSuccessEffect() {
+            // Create dramatic warning effect for successful vulnerability confirmation
+            const notification = document.createElement('div');
+            notification.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75';
+            notification.innerHTML = `
+                <div class="bg-red-600 text-white p-8 rounded-lg text-center max-w-md animate-pulse">
+                    <div class="text-6xl mb-4">🚨</div>
+                    <div class="text-2xl font-bold mb-2">CRITICAL VULNERABILITY</div>
+                    <div class="text-lg mb-4">CVE-2020-1472 (Zerologon)</div>
+                    <div class="text-sm">Target is vulnerable to authentication bypass!</div>
+                    <div class="mt-4 text-xs text-red-200">This is a critical security finding</div>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+            
+            // Also allow clicking to dismiss
+            notification.addEventListener('click', () => {
+                notification.remove();
+            });
+        },
+        
+        async downloadZerologonResults() {
+            if (!this.zerologonResult) return;
+            
+            try {
+                const results = {
+                    tool: 'BreachPilot',
+                    cve_id: 'CVE-2020-1472',
+                    vulnerability_name: 'Zerologon',
+                    target_ip: this.targetIp,
+                    dc_name: this.zerologonDcName,
+                    timestamp: new Date().toISOString(),
+                    test_result: this.zerologonResult
+                };
+                
+                const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `zerologon_test_${this.targetIp}_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('✅ Zerologon results downloaded successfully', 'success');
+            } catch (error) {
+                console.error('Download failed:', error);
+                this.showNotification('❌ Download failed', 'error');
+            }
+        },
+        
+        getPortRisk(port, service) {
+            const riskMap = {
+                21: 'HIGH', 22: 'MEDIUM', 23: 'HIGH', 25: 'MEDIUM', 53: 'MEDIUM',
+                80: 'LOW', 110: 'MEDIUM', 135: 'HIGH', 139: 'HIGH', 143: 'MEDIUM',
+                443: 'LOW', 445: 'HIGH', 993: 'LOW', 995: 'LOW', 1433: 'HIGH',
+                3306: 'HIGH', 3389: 'HIGH', 5432: 'HIGH', 5900: 'HIGH'
+            };
+            return riskMap[port] || 'MEDIUM';
+        },
+        
+        getPortRiskClass(port, service) {
+            const risk = this.getPortRisk(port, service);
+            return {
+                'HIGH': 'bg-red-600',
+                'MEDIUM': 'bg-yellow-500',
+                'LOW': 'bg-green-500'
+            }[risk] || 'bg-gray-500';
         },
         
         async searchPocs() {
@@ -289,6 +421,11 @@ createApp({
             return this.pocResults.reduce((total, result) => total + result.available_pocs.length, 0);
         },
         
+        getPocsWithCode() {
+            return this.pocResults.reduce((total, result) => 
+                total + result.available_pocs.filter(poc => poc.code).length, 0);
+        },
+        
         getGitHubRepos() {
             return this.pocResults.reduce((total, result) => 
                 total + result.available_pocs.filter(poc => poc.source.includes('GitHub')).length, 0);
@@ -314,7 +451,7 @@ createApp({
         },
         
         formatTimestamp(timestamp) {
-            return new Date(timestamp).toLocaleString();
+            return new Date(timestamp * 1000).toLocaleString();
         },
         
         formatCveExplanation(explanation) {
