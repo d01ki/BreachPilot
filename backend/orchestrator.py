@@ -122,7 +122,7 @@ class ScanOrchestrator:
         return results
     
     def execute_poc_by_index(self, session_id: str, cve_id: str, poc_index: int, target_ip: str) -> ExploitResult:
-        """Execute a specific PoC by index using git clone method"""
+        """Execute a specific PoC by index using enhanced method"""
         logger.info(f"Executing PoC #{poc_index} for {cve_id}")
         
         session = self._get_session(session_id)
@@ -141,8 +141,8 @@ class ScanOrchestrator:
         if not poc_result or not target_poc:
             raise ValueError(f"PoC #{poc_index} not found for {cve_id}")
         
-        # Execute single PoC using the new git clone method
-        result = self.exploit_crew._execute_single_poc_git(target_ip, cve_id, target_poc, poc_index + 1)
+        # Execute single PoC using the new enhanced method
+        result = self.exploit_crew.execute_single_poc_enhanced(target_ip, cve_id, target_poc, poc_index + 1)
         
         # Update session
         session.exploit_results.append(result)
