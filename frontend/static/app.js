@@ -1,548 +1,220 @@
 const { createApp } = Vue;
-const API_URL = window.location.origin;
 
 createApp({
     data() {
         return {
-            targetIp: '', sessionId: null, currentStep: '', loading: false,
-            osintResult: null, nmapResult: null, analystResult: null,
-            pocResults: [], exploitResults: [],
-            osintComplete: false, nmapComplete: false, analysisComplete: false,
-            selectedCves: [], pocSearchStarted: false, pocLimit: 4,
-            expandedCves: {}, expandedCode: {}, expandedOutputs: {},
-            debugMode: false, showRawOutput: false,
-            executingPocs: new Set(),
-            aiAgentStatus: 'Idle',  // Track AI agent status
-            pocSearchProgress: '',  // Track search progress
-            // Zerologon specific data
-            zerologonDcName: 'DC01',
-            zerologonExecuting: false,
-            zerologonResult: null,
-            showZerologonOutput: false,
+            targetIp: '',
+            sessionId: null,
+            currentStep: null,
+            osintResult: null,
+            nmapResult: null,
+            analystResult: null,
+            debugMode: false,
+            showRawOutput: false,
+            expandedCves: {},
+            
+            // PoC Search functionality
+            selectedCves: [],
+            pocResults: [],
+            pocSearching: false,
+            exploitResults: [],
+            executingPocs: {},
+            visiblePocCode: {},
+            visibleExploitOutput: {}
         }
     },
+    
+    computed: {
+        osintComplete() { return !!this.osintResult; },
+        nmapComplete() { return !!this.nmapResult; },
+        analysisComplete() { return !!this.analystResult; }
+    },
+    
     methods: {
         async startScan() {
             if (!this.targetIp) return;
+            
             try {
-                const res = await axios.post(`${API_URL}/api/scan/start`, { target_ip: this.targetIp });
-                this.sessionId = res.data.session_id;
-                this.startPolling();
-                setTimeout(() => this.runStep('osint'), 500);
+                const response = await axios.post('/api/scan/start', {
+                    target_ip: this.targetIp
+                });
+                this.sessionId = response.data.session_id;
+                console.log('Scan started:', this.sessionId);
             } catch (error) {
-                console.error('Failed to start scan:', error);
-                alert('Failed to start scan: ' + (error.response?.data?.detail || error.message));
+                console.error('Error starting scan:', error);
+                alert('Failed to start scan');
             }
         },
         
         async runStep(step) {
             this.currentStep = step;
             try {
-                const url = `${API_URL}/api/scan/${this.sessionId}/${step === 'analyze' ? 'analyze' : step}`;
-                console.log(`🚀 Running ${step} with AI agents...`);
-                
-                const res = await axios.post(url);
-                console.log(`✅ ${step} completed:`, res.data);
-                
-                if (step === 'osint') { 
-                    this.osintResult = res.data; 
-                    this.osintComplete = true;
+                let response;
+                switch(step) {
+                    case 'osint':
+                        response = await axios.post(`/api/scan/${this.sessionId}/osint`);
+                        this.osintResult = response.data;
+                        break;
+                    case 'nmap':
+                        response = await axios.post(`/api/scan/${this.sessionId}/nmap`);
+                        this.nmapResult = response.data;
+                        console.log('Nmap result received:', this.nmapResult);
+                        break;
+                    case 'analyze':
+                        response = await axios.post(`/api/scan/${this.sessionId}/analyze`);
+                        this.analystResult = response.data;
+                        break;
                 }
-                if (step === 'nmap') { 
-                    this.nmapResult = res.data; 
-                    this.nmapComplete = true;
-                }
-                if (step === 'analyze') { 
-                    this.analystResult = res.data; 
-                    this.analysisComplete = true;
-                    console.log(`📊 CVE Analysis found ${this.analystResult?.identified_cves?.length || 0} vulnerabilities`);
-                }
-                this.currentStep = '';
+                this.currentStep = null;
             } catch (error) {
-                console.error(`❌ ${step} failed:`, error);
-                this.currentStep = '';
-                alert(`${step} failed: ` + (error.response?.data?.detail || error.message));
+                console.error(`Error running ${step}:`, error);
+                alert(`Failed to run ${step}`);
+                this.currentStep = null;
             }
         },
         
-        async executeZerologon() {
-            if (!this.targetIp || this.zerologonExecuting) return;
-            
-            this.zerologonExecuting = true;
-            console.log(`🚀 Executing Zerologon PoC against ${this.targetIp} (DC: ${this.zerologonDcName})`);
-            
-            try {
-                const payload = {
-                    target_ip: this.targetIp,
-                    dc_name: this.zerologonDcName || 'DC01'
-                };
-                
-                const res = await axios.post(`${API_URL}/api/zerologon/execute`, payload);
-                
-                console.log(`🎯 Zerologon execution result:`, res.data);
-                this.zerologonResult = res.data;
-                
-                if (res.data.success) {
-                    this.showNotification(`🚨 WARNING: Target is VULNERABLE to Zerologon!`, 'error');
-                    this.createZerologonSuccessEffect();
-                } else {
-                    this.showNotification(`✅ Target is NOT vulnerable to Zerologon`, 'success');
-                }
-                
-            } catch (error) {
-                console.error(`❌ Zerologon execution failed:`, error);
-                this.showNotification(`❌ Zerologon test failed: ${error.response?.data?.detail || error.message}`, 'error');
-                
-                // Create error result object
-                this.zerologonResult = {
-                    cve_id: "CVE-2020-1472",
-                    target_ip: this.targetIp,
-                    dc_name: this.zerologonDcName,
-                    success: false,
-                    execution_output: `Error: ${error.response?.data?.detail || error.message}`,
-                    timestamp: Date.now() / 1000,
-                    execution_time: 0,
-                    vulnerability_confirmed: false,
-                    exploit_successful: false,
-                    artifacts: ["Error occurred during execution"]
-                };
-            } finally {
-                this.zerologonExecuting = false;
+        // PoC Search Methods
+        getSelectedCves() {
+            return this.selectedCves;
+        },
+        
+        async searchPoCs() {
+            if (!this.selectedCves.length) {
+                alert('Please select at least one CVE');
+                return;
             }
-        },
-        
-        toggleZerologonOutput() {
-            this.showZerologonOutput = !this.showZerologonOutput;
-        },
-        
-        createZerologonSuccessEffect() {
-            // Create dramatic warning effect for successful vulnerability confirmation
-            const notification = document.createElement('div');
-            notification.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75';
-            notification.innerHTML = `
-                <div class="bg-red-600 text-white p-8 rounded-lg text-center max-w-md animate-pulse">
-                    <div class="text-6xl mb-4">🚨</div>
-                    <div class="text-2xl font-bold mb-2">CRITICAL VULNERABILITY</div>
-                    <div class="text-lg mb-4">CVE-2020-1472 (Zerologon)</div>
-                    <div class="text-sm">Target is vulnerable to authentication bypass!</div>
-                    <div class="mt-4 text-xs text-red-200">This is a critical security finding</div>
-                </div>
-            `;
             
-            document.body.appendChild(notification);
-            
-            // Remove after 5 seconds
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
-            
-            // Also allow clicking to dismiss
-            notification.addEventListener('click', () => {
-                notification.remove();
-            });
-        },
-        
-        async downloadZerologonResults() {
-            if (!this.zerologonResult) return;
-            
+            this.pocSearching = true;
             try {
-                const results = {
-                    tool: 'BreachPilot',
-                    cve_id: 'CVE-2020-1472',
-                    vulnerability_name: 'Zerologon',
-                    target_ip: this.targetIp,
-                    dc_name: this.zerologonDcName,
-                    timestamp: new Date().toISOString(),
-                    test_result: this.zerologonResult
-                };
-                
-                const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `zerologon_test_${this.targetIp}_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                this.showNotification('✅ Zerologon results downloaded successfully', 'success');
-            } catch (error) {
-                console.error('Download failed:', error);
-                this.showNotification('❌ Download failed', 'error');
-            }
-        },
-        
-        getPortRisk(port, service) {
-            const riskMap = {
-                21: 'HIGH', 22: 'MEDIUM', 23: 'HIGH', 25: 'MEDIUM', 53: 'MEDIUM',
-                80: 'LOW', 110: 'MEDIUM', 135: 'HIGH', 139: 'HIGH', 143: 'MEDIUM',
-                443: 'LOW', 445: 'HIGH', 993: 'LOW', 995: 'LOW', 1433: 'HIGH',
-                3306: 'HIGH', 3389: 'HIGH', 5432: 'HIGH', 5900: 'HIGH'
-            };
-            return riskMap[port] || 'MEDIUM';
-        },
-        
-        getPortRiskClass(port, service) {
-            const risk = this.getPortRisk(port, service);
-            return {
-                'HIGH': 'bg-red-600',
-                'MEDIUM': 'bg-yellow-500',
-                'LOW': 'bg-green-500'
-            }[risk] || 'bg-gray-500';
-        },
-        
-        async searchPocs() {
-            try {
-                this.pocSearchStarted = true;
-                this.currentStep = 'poc_search';
-                this.aiAgentStatus = 'Initializing AI Agents...';
-                this.pocSearchProgress = 'Starting AI-powered PoC search...';
-                
-                const payload = {
+                const response = await axios.post(`/api/scan/${this.sessionId}/poc`, {
                     selected_cves: this.selectedCves,
-                    limit: parseInt(this.pocLimit)
-                };
-                
-                console.log('🤖 Starting AI-enhanced PoC search:', payload);
-                
-                // Set progress updates
-                const progressMessages = [
-                    '🔍 AI agents analyzing CVE patterns...',
-                    '🎯 Searching GitHub repositories...',
-                    '📊 Evaluating PoC quality...',
-                    '🤖 AI agents ranking exploits...',
-                    '✅ Finalizing search results...'
-                ];
-                
-                let progressIndex = 0;
-                const progressInterval = setInterval(() => {
-                    if (progressIndex < progressMessages.length) {
-                        this.pocSearchProgress = progressMessages[progressIndex];
-                        progressIndex++;
-                    }
-                }, 3000);
-                
-                const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/poc`, payload);
-                
-                clearInterval(progressInterval);
-                
-                console.log('🎯 AI-enhanced PoC search results:', res.data);
-                
-                if (Array.isArray(res.data)) {
-                    this.pocResults = res.data;
-                    this.aiAgentStatus = `✅ Found ${this.getTotalPoCs()} PoCs`;
-                    this.pocSearchProgress = `Search complete! Found ${this.getGitHubRepos()} GitHub repositories`;
-                    
-                    // Force UI update
-                    this.$forceUpdate();
-                } else {
-                    console.error('❌ Unexpected response format:', res.data);
-                    this.pocResults = [];
-                    this.aiAgentStatus = '❌ Search failed';
-                }
-                
-                this.currentStep = '';
+                    limit: 4
+                });
+                this.pocResults = response.data;
+                console.log('PoC search results:', this.pocResults);
             } catch (error) {
-                console.error('❌ AI PoC search failed:', error);
-                this.currentStep = '';
-                this.aiAgentStatus = '❌ AI agents error';
-                this.pocSearchProgress = 'Search failed: ' + (error.response?.data?.detail || error.message);
+                console.error('Error searching PoCs:', error);
+                alert('Failed to search PoCs');
+            } finally {
+                this.pocSearching = false;
             }
         },
         
-        async executeSinglePoc(cveId, pocIndex) {
-            const pocKey = `${cveId}_${pocIndex}`;
-            if (this.executingPocs.has(pocKey)) return;
-            
-            this.executingPocs.add(pocKey);
+        async executePoc(cveId, pocIndex) {
+            const key = `${cveId}-${pocIndex}`;
+            this.executingPocs[key] = true;
             
             try {
-                console.log(`🚀 Executing PoC via AI-enhanced git clone: ${cveId} #${pocIndex}`);
-                
-                const payload = {
+                const response = await axios.post(`/api/scan/${this.sessionId}/exploit/by_index`, {
                     cve_id: cveId,
                     poc_index: pocIndex,
                     target_ip: this.targetIp
-                };
+                });
                 
-                const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/by_index`, payload);
-                
-                console.log(`🎯 Exploit execution result:`, res.data);
-                
-                this.updateExploitResult(res.data);
-                
-                if (res.data.success) {
-                    this.showNotification(`✅ ${cveId} PoC #${pocIndex + 1} executed successfully!`, 'success');
-                    this.createSuccessEffect(cveId, pocIndex);
-                } else {
-                    this.showNotification(`❌ ${cveId} PoC #${pocIndex + 1} failed: ${res.data.failure_reason || 'Unknown error'}`, 'error');
-                }
-                
-            } catch (error) {
-                console.error(`❌ PoC execution failed:`, error);
-                this.showNotification(`❌ PoC execution failed: ${error.response?.data?.detail || error.message}`, 'error');
-            } finally {
-                this.executingPocs.delete(pocKey);
-            }
-        },
-        
-        async executeAllPocs(cveId) {
-            try {
-                console.log(`🚀 Executing all PoCs for: ${cveId}`);
-                
-                const payload = {
+                // Store the result
+                this.exploitResults.push({
+                    ...response.data,
                     cve_id: cveId,
-                    target_ip: this.targetIp
-                };
+                    poc_index: pocIndex
+                });
                 
-                const res = await axios.post(`${API_URL}/api/scan/${this.sessionId}/exploit/multi`, payload);
-                
-                console.log(`🎯 Multi-PoC execution results:`, res.data);
-                
-                res.data.forEach(result => this.updateExploitResult(result));
-                
-                const successful = res.data.filter(r => r.success).length;
-                const message = `${cveId}: ${successful}/${res.data.length} PoCs executed successfully`;
-                this.showNotification(message, successful > 0 ? 'success' : 'error');
-                
+                console.log('PoC execution result:', response.data);
             } catch (error) {
-                console.error(`❌ Multi-PoC execution failed:`, error);
-                this.showNotification(`❌ Multi-PoC execution failed: ${error.response?.data?.detail || error.message}`, 'error');
+                console.error('Error executing PoC:', error);
+                alert('Failed to execute PoC');
+            } finally {
+                this.executingPocs[key] = false;
             }
         },
         
-        // Enhanced CVE display methods
-        getCriticalCount() {
-            if (!this.analystResult?.identified_cves) return 0;
-            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 9.0).length;
+        isExecuting(cveId, pocIndex) {
+            const key = `${cveId}-${pocIndex}`;
+            return !!this.executingPocs[key];
         },
         
-        getHighCount() {
-            if (!this.analystResult?.identified_cves) return 0;
-            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 7.0 && cve.cvss_score < 9.0).length;
+        getExploitResult(cveId, pocIndex) {
+            return this.exploitResults.find(r => r.cve_id === cveId && r.poc_index === pocIndex);
         },
         
-        getMediumCount() {
-            if (!this.analystResult?.identified_cves) return 0;
-            return this.analystResult.identified_cves.filter(cve => cve.cvss_score >= 4.0 && cve.cvss_score < 7.0).length;
+        // UI Toggle Methods
+        togglePocCode(cveId, pocIndex) {
+            const key = `${cveId}-${pocIndex}`;
+            this.visiblePocCode[key] = !this.visiblePocCode[key];
         },
         
-        getCveCardClass(cve) {
-            if (cve.cvss_score >= 9.0) return 'border-red-500 bg-red-900 bg-opacity-20';
-            if (cve.cvss_score >= 7.0) return 'border-orange-500 bg-orange-900 bg-opacity-20';
-            if (cve.cvss_score >= 4.0) return 'border-yellow-500 bg-yellow-900 bg-opacity-20';
-            return 'border-green-500 bg-green-900 bg-opacity-20';
-        },
-        
-        getCvssLabel(score) {
-            if (!score) return 'N/A';
-            if (score >= 9.0) return `CRITICAL ${score}`;
-            if (score >= 7.0) return `HIGH ${score}`;
-            if (score >= 4.0) return `MEDIUM ${score}`;
-            return `LOW ${score}`;
-        },
-        
-        getCvssClass(score) {
-            if (!score) return 'bg-gray-500 text-white';
-            if (score >= 9.0) return 'bg-red-600 text-white vulnerability-critical';
-            if (score >= 7.0) return 'bg-orange-500 text-white';
-            if (score >= 4.0) return 'bg-yellow-500 text-black';
-            return 'bg-green-500 text-white';
-        },
-        
-        getRiskIcon(cve) {
-            if (cve.cvss_score >= 9.0) return 'fas fa-skull';
-            if (cve.cvss_score >= 7.0) return 'fas fa-exclamation-triangle';
-            if (cve.cvss_score >= 4.0) return 'fas fa-exclamation-circle';
-            return 'fas fa-info-circle';
-        },
-        
-        createSuccessEffect(cveId, pocIndex) {
-            // Create success visual effect
-            const notification = document.createElement('div');
-            notification.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 exploit-success p-8 rounded-lg text-center';
-            notification.innerHTML = `
-                <i class="fas fa-trophy text-4xl mb-4"></i>
-                <div class="text-xl font-bold">EXPLOIT SUCCESSFUL!</div>
-                <div class="text-sm">${cveId} PoC #${pocIndex + 1}</div>
-            `;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
-        },
-        
-        updateExploitResult(newResult) {
-            const existingIndex = this.exploitResults.findIndex(r => 
-                r.cve_id === newResult.cve_id && r.poc_index === newResult.poc_index
-            );
-            
-            if (existingIndex >= 0) {
-                this.exploitResults[existingIndex] = newResult;
-            } else {
-                this.exploitResults.push(newResult);
-            }
-            
-            this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        },
-        
-        getExploitResultsForPoc(cveId, pocIndex) {
-            return this.exploitResults.filter(r => 
-                r.cve_id === cveId && (r.poc_index === pocIndex || r.poc_index === pocIndex + 1)
-            );
-        },
-        
-        getSourceBadgeClass(source) {
-            const classes = {
-                'AI Recommended GitHub': 'bg-purple-600 text-white',
-                'GitHub Repository': 'bg-gray-800 text-white',
-                'GitHub Code': 'bg-gray-700 text-white',
-                'AI Recommended ExploitDB': 'bg-red-700 text-white',
-                'ExploitDB': 'bg-red-600 text-white',
-                'PacketStorm': 'bg-orange-600 text-white'
-            };
-            return classes[source] || 'bg-blue-600 text-white';
-        },
-        
-        showPocQuality(poc) {
-            if (poc.ai_recommended) {
-                return `🤖 AI Recommended (${Math.round((poc.ai_confidence || 0.5) * 100)}% confidence)`;
-            }
-            if (poc.repo_score) {
-                return `Quality Score: ${poc.repo_score}`;
-            }
-            return '';
-        },
-        
-        getTotalPoCs() {
-            return this.pocResults.reduce((total, result) => total + result.available_pocs.length, 0);
-        },
-        
-        getPocsWithCode() {
-            return this.pocResults.reduce((total, result) => 
-                total + result.available_pocs.filter(poc => poc.code).length, 0);
-        },
-        
-        getGitHubRepos() {
-            return this.pocResults.reduce((total, result) => 
-                total + result.available_pocs.filter(poc => poc.source.includes('GitHub')).length, 0);
-        },
-        
-        getAIRecommended() {
-            return this.pocResults.reduce((total, result) => 
-                total + result.available_pocs.filter(poc => poc.ai_recommended).length, 0);
-        },
-        
-        toggleCode(cveId, pocIndex) {
-            const key = `${cveId}_${pocIndex}`;
-            this.expandedCode[key] = !this.expandedCode[key];
+        isPocCodeVisible(cveId, pocIndex) {
+            const key = `${cveId}-${pocIndex}`;
+            return !!this.visiblePocCode[key];
         },
         
         toggleExploitOutput(cveId, pocIndex) {
-            const key = `${cveId}_${pocIndex}`;
-            this.expandedOutputs[key] = !this.expandedOutputs[key];
+            const key = `${cveId}-${pocIndex}`;
+            this.visibleExploitOutput[key] = !this.visibleExploitOutput[key];
+        },
+        
+        isExploitOutputVisible(cveId, pocIndex) {
+            const key = `${cveId}-${pocIndex}`;
+            return !!this.visibleExploitOutput[key];
         },
         
         toggleCveDetails(cveId) {
             this.expandedCves[cveId] = !this.expandedCves[cveId];
         },
         
-        formatTimestamp(timestamp) {
-            return new Date(timestamp * 1000).toLocaleString();
+        // Utility Methods
+        getCvssClass(score) {
+            if (score >= 9.0) return 'bg-red-600';
+            if (score >= 7.0) return 'bg-red-500';
+            if (score >= 4.0) return 'bg-yellow-500';
+            return 'bg-green-500';
+        },
+        
+        getPortRisk(port, service) {
+            const highRiskPorts = [22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1433, 3306, 3389, 5432, 5985, 5986];
+            const criticalServices = ['ssh', 'telnet', 'ftp', 'smtp', 'http', 'https', 'smb', 'rdp', 'winrm'];
+            
+            if (criticalServices.some(s => service?.toLowerCase().includes(s))) return 'HIGH';
+            if (highRiskPorts.includes(parseInt(port))) return 'MEDIUM';
+            return 'LOW';
+        },
+        
+        getPortRiskClass(port, service) {
+            const risk = this.getPortRisk(port, service);
+            switch(risk) {
+                case 'HIGH': return 'bg-red-500';
+                case 'MEDIUM': return 'bg-yellow-500';
+                default: return 'bg-green-500';
+            }
         },
         
         formatCveExplanation(explanation) {
             if (!explanation) return '';
             
-            return explanation
+            // Convert markdown-like formatting to HTML
+            let formatted = explanation
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/\n\n/g, '</p><p>')
-                .replace(/\n/g, '<br>')
-                .replace(/^/, '<p>')
-                .replace(/$/, '</p>');
+                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded">$1</code>')
+                .replace(/\n\n/g, '</p><p class="mt-2">')
+                .replace(/\n/g, '<br>');
+            
+            return `<p>${formatted}</p>`;
         },
         
-        showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-3 rounded shadow-lg z-50 ${
-                type === 'success' ? 'bg-green-500 text-white' :
-                type === 'error' ? 'bg-red-500 text-white' :
-                'bg-blue-500 text-white'
-            }`;
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
-        },
-        
-        async loadResults() {
-            try {
-                const res = await axios.get(`${API_URL}/api/scan/${this.sessionId}/results`);
-                const r = res.data;
-                
-                if (this.debugMode) {
-                    console.log('📡 Loading results:', r);
-                }
-                
-                if (r.osint_result && !this.osintComplete) {
-                    this.osintResult = r.osint_result;
-                    this.osintComplete = true;
-                }
-                if (r.nmap_result && !this.nmapComplete) {
-                    this.nmapResult = r.nmap_result;
-                    this.nmapComplete = true;
-                }
-                if (r.analyst_result && !this.analysisComplete) {
-                    this.analystResult = r.analyst_result;
-                    this.analysisComplete = true;
-                }
-                if (r.poc_results) {
-                    const currentPocData = JSON.stringify(this.pocResults);
-                    const newPocData = JSON.stringify(r.poc_results);
-                    
-                    if (currentPocData !== newPocData) {
-                        if (this.debugMode) {
-                            console.log('🔄 PoC results updated:', r.poc_results);
-                        }
-                        this.pocResults = r.poc_results;
-                        if (r.poc_results.length > 0) {
-                            this.pocSearchStarted = true;
-                        }
-                    }
-                }
-                if (r.exploit_results) {
-                    r.exploit_results.forEach(newResult => {
-                        const existingIndex = this.exploitResults.findIndex(existing => 
-                            existing.cve_id === newResult.cve_id && 
-                            existing.poc_index === newResult.poc_index &&
-                            existing.timestamp === newResult.timestamp
-                        );
-                        
-                        if (existingIndex < 0) {
-                            this.exploitResults.push(newResult);
-                        }
-                    });
-                    
-                    this.exploitResults.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                }
-            } catch (error) {
-                console.error('Failed to load results:', error);
-            }
+        formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            return new Date(timestamp * 1000).toLocaleString();
         },
         
         async downloadResults() {
             try {
-                const results = {
-                    session_id: this.sessionId,
-                    target_ip: this.targetIp,
-                    timestamp: new Date().toISOString(),
+                const response = await axios.get(`/api/scan/${this.sessionId}/results`);
+                const data = {
+                    scan_info: {
+                        target_ip: this.targetIp,
+                        session_id: this.sessionId,
+                        timestamp: new Date().toISOString()
+                    },
                     osint_result: this.osintResult,
                     nmap_result: this.nmapResult,
                     analyst_result: this.analystResult,
@@ -550,107 +222,50 @@ createApp({
                     exploit_results: this.exploitResults
                 };
                 
-                const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `breachpilot_results_${this.targetIp}_${new Date().toISOString().split('T')[0]}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                this.showNotification('✅ Results downloaded successfully', 'success');
+                window.URL.revokeObjectURL(url);
             } catch (error) {
-                console.error('Download failed:', error);
-                this.showNotification('❌ Download failed', 'error');
+                console.error('Error downloading results:', error);
+                alert('Failed to download results');
             }
-        },
-        
-        async cleanupFiles() {
-            try {
-                await axios.delete(`${API_URL}/api/scan/${this.sessionId}/exploit_files?keep_successful=true`);
-                this.showNotification('✅ Temporary files cleaned up successfully', 'success');
-            } catch (error) {
-                console.error('File cleanup failed:', error);
-                this.showNotification('❌ File cleanup failed', 'error');
-            }
-        },
-        
-        startPolling() {
-            setInterval(() => {
-                if (this.sessionId) {
-                    this.loadResults();
-                }
-            }, 3000);
         },
         
         reset() {
-            Object.assign(this.$data, this.$options.data());
-        },
-        
-        // Debug method
-        inspectPocData() {
-            console.log('🐛 Debug - Current PoC Results:');
-            console.log('pocResults length:', this.pocResults.length);
-            console.log('pocSearchStarted:', this.pocSearchStarted);
-            console.log('AI Agent Status:', this.aiAgentStatus);
-            console.log('Search Progress:', this.pocSearchProgress);
-            console.log('pocResults data:', this.pocResults);
+            // Reset all data
+            this.targetIp = '';
+            this.sessionId = null;
+            this.currentStep = null;
+            this.osintResult = null;
+            this.nmapResult = null;
+            this.analystResult = null;
+            this.debugMode = false;
+            this.showRawOutput = false;
+            this.expandedCves = {};
             
-            this.pocResults.forEach((result, index) => {
-                console.log(`CVE ${index + 1}:`, result.cve_id);
-                console.log(`  PoCs available:`, result.available_pocs.length);
-                console.log(`  Status:`, result.status);
-                result.available_pocs.forEach((poc, pocIndex) => {
-                    console.log(`    PoC ${pocIndex + 1}: ${poc.source} - ${poc.url}`);
-                    if (poc.ai_recommended) {
-                        console.log(`      🤖 AI Recommended (${poc.ai_confidence})`);
-                    }
-                });
-            });
-        }
-    },
-    
-    computed: {
-        isExecutingPoc() {
-            return (cveId, pocIndex) => {
-                return this.executingPocs.has(`${cveId}_${pocIndex}`);
-            };
-        },
-        
-        successfulExploits() {
-            return this.exploitResults.filter(r => r.success);
-        },
-        
-        totalExploitAttempts() {
-            return this.exploitResults.length;
-        },
-        
-        exploitSuccessRate() {
-            if (this.totalExploitAttempts === 0) return 0;
-            return Math.round((this.successfulExploits.length / this.totalExploitAttempts) * 100);
+            // Reset PoC data
+            this.selectedCves = [];
+            this.pocResults = [];
+            this.pocSearching = false;
+            this.exploitResults = [];
+            this.executingPocs = {};
+            this.visiblePocCode = {};
+            this.visibleExploitOutput = {};
         }
     },
     
     mounted() {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('debug') === 'true') {
-            this.debugMode = true;
-            console.log('🐛 Debug mode enabled');
-        }
+        console.log('BreachPilot frontend loaded');
         
-        const sessionFromUrl = urlParams.get('session');
-        if (sessionFromUrl) {
-            this.sessionId = sessionFromUrl;
-            this.startPolling();
-            this.loadResults();
-        }
-        
-        // Add debug functions
-        if (this.debugMode) {
-            window.inspectPocData = this.inspectPocData;
-            console.log('🐛 Debug commands: inspectPocData()');
+        // Auto-refresh session status if we have a session
+        if (this.sessionId) {
+            setInterval(this.checkSessionStatus, 2000);
         }
     }
 }).mount('#app');
