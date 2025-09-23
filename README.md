@@ -91,6 +91,21 @@ cp .env.example .env
 # Edit .env and add your OpenAI API key
 ```
 
+### 🔧 Troubleshooting Installation
+
+If you encounter a **CFFI version mismatch error** during execution, run the automatic fix:
+
+```bash
+# Make the fix script executable
+chmod +x fix_dependencies.sh
+
+# Run the fix (ensure virtual environment is activated)
+source venv/bin/activate
+./fix_dependencies.sh
+```
+
+For other installation issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ### Configuration
 
 Create a `.env` file:
@@ -205,6 +220,7 @@ results = requests.get(f'http://localhost:8000/api/scan/{session_id}/results')
 - **Sandboxed Execution**: Exploits run in isolated environment
 - **Timeout Protection**: Automatic termination of long-running exploits
 - **Audit Logging**: Complete activity logs for compliance
+- **Environment Verification**: Automatic dependency checking and fixing
 
 ## 🤝 Contributing
 
