@@ -118,6 +118,8 @@ class ExploitResult(BaseModel):
     success_indicators: List[str] = Field(default_factory=list)
     exploit_filename: Optional[str] = None
     return_code: Optional[int] = None
+    evidence: List[str] = Field(default_factory=list)
+    environment_info: Optional[Dict[str, Any]] = Field(default_factory=dict)
     
     # Added fields for compatibility
     vulnerability_confirmed: bool = False
