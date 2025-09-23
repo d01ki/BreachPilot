@@ -46,6 +46,7 @@ class CVEInfo(BaseModel):
     affected_service: str = ""
     exploit_available: bool = False
     cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
+    xai_explanation: str = ""  # Added for compatibility
 
 class CVEAnalysis(BaseModel):
     """Legacy CVE Analysis model for backward compatibility"""
@@ -117,6 +118,10 @@ class ExploitResult(BaseModel):
     success_indicators: List[str] = Field(default_factory=list)
     exploit_filename: Optional[str] = None
     return_code: Optional[int] = None
+    
+    # Added fields for compatibility
+    vulnerability_confirmed: bool = False
+    exploit_successful: bool = False
 
 class ReportData(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
