@@ -17,6 +17,56 @@
             font-family: 'Courier New', monospace; 
             font-size: 11px;
         }
+        .cvss-critical { background: linear-gradient(135deg, #dc2626, #ef4444); }
+        .cvss-high { background: linear-gradient(135deg, #ea580c, #f97316); }
+        .cvss-medium { background: linear-gradient(135deg, #d97706, #f59e0b); }
+        .cvss-low { background: linear-gradient(135deg, #16a34a, #22c55e); }
+        .cvss-info { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+        .cvss-score { 
+            font-size: 1.5rem; 
+            font-weight: 800; 
+            padding: 8px 16px; 
+            border-radius: 12px; 
+            color: white; 
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .service-info { 
+            background: linear-gradient(135deg, #1e40af, #3b82f6);
+            color: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 12px 0;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+        .auto-indicator {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 16px;
+            margin-left: 8px;
+            animation: pulse 2s infinite;
+        }
+        .cve-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        .cve-card:hover {
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .cve-description {
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            border-radius: 0 8px 8px 0;
+            margin: 12px 0;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -25,7 +75,8 @@
         
         <div v-if="!sessionId" class="bg-white p-4 rounded shadow">
             <input v-model="targetIp" placeholder="Target IP" class="border p-2 mr-2" @keyup.enter="startScan">
-            <button @click="startScan" class="bg-blue-500 text-white px-4 py-2 rounded">Start</button>
+            <button @click="startScan" class="bg-blue-500 text-white px-4 py-2 rounded">🚀 Start Auto Scan</button>
+            <p class="text-xs text-gray-600 mt-2">Auto-scan will automatically run OSINT and Nmap scans</p>
         </div>
 
         <div v-if="sessionId" class="space-y-4">
@@ -38,11 +89,22 @@
                         <span v-else>1</span>
                     </div>
                     <h2 class="text-xl font-bold flex-1">OSINT</h2>
-                    <button v-if="!osintComplete" @click="runStep('osint')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
+                    <span v-if="autoScanActive && currentStep==='osint'" class="auto-indicator">AUTO</span>
+                    <button v-else-if="!osintComplete" @click="runStep('osint')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
                 </div>
-                <div v-if="osintResult" class="mt-2 text-sm bg-gray-50 p-2 rounded">
-                    <p><strong>Org:</strong> {{osintResult.whois_info?.org}}</p>
-                    <p><strong>Country:</strong> {{osintResult.whois_info?.country}}</p>
+                <div v-if="osintResult" class="mt-2 text-sm bg-gray-50 p-3 rounded">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p><strong>🏢 Organization:</strong> {{osintResult.whois_info?.org || 'N/A'}}</p>
+                            <p><strong>🌍 Country:</strong> {{osintResult.whois_info?.country || 'N/A'}}</p>
+                            <p><strong>🏙️ City:</strong> {{osintResult.whois_info?.city || 'N/A'}}</p>
+                        </div>
+                        <div>
+                            <p><strong>🌐 ISP:</strong> {{osintResult.whois_info?.isp || 'N/A'}}</p>
+                            <p><strong>📧 Email:</strong> {{osintResult.whois_info?.abuse || 'N/A'}}</p>
+                            <p><strong>📞 Phone:</strong> {{osintResult.whois_info?.phone || 'N/A'}}</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -55,41 +117,51 @@
                         <span v-else>2</span>
                     </div>
                     <h2 class="text-xl font-bold flex-1">Nmap Scan</h2>
-                    <button v-if="osintComplete && !nmapComplete" @click="runStep('nmap')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
+                    <span v-if="autoScanActive && currentStep==='nmap'" class="auto-indicator">AUTO</span>
+                    <button v-else-if="osintComplete && !nmapComplete" @click="runStep('nmap')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
                 </div>
                 
-                <!-- Debug Information -->
-                <div v-if="nmapResult && debugMode" class="mt-2 p-2 bg-yellow-50 border rounded text-xs">
-                    <strong>Debug Info:</strong><br>
-                    Status: {{nmapResult.status}}<br>
-                    Open Ports Array Length: {{nmapResult.open_ports?.length || 0}}<br>
-                    Services Array Length: {{nmapResult.services?.length || 0}}<br>
-                    Raw Output Length: {{nmapResult.raw_output?.length || 0}} chars<br>
-                    <button @click="debugMode = !debugMode" class="text-blue-600 underline">Hide Debug</button>
-                </div>
-                <div v-else-if="nmapResult" class="mt-2">
-                    <button @click="debugMode = true" class="text-xs text-gray-500 underline">Show Debug Info</button>
-                </div>
-                
-                <!-- Nmap Results Display -->
+                <!-- Enhanced Scan Summary with Service Info -->
                 <div v-if="nmapResult" class="mt-2">
-                    <!-- Scan Summary -->
-                    <div class="mb-3 p-2 bg-blue-50 rounded">
-                        <h3 class="font-bold text-blue-800">Scan Summary</h3>
-                        <p class="text-sm text-blue-700">
-                            <strong>Status:</strong> {{nmapResult.status}} |
-                            <strong>Total Open Ports:</strong> {{nmapResult.open_ports?.length || 0}} |
-                            <strong>OS:</strong> {{nmapResult.os_detection?.name || 'Unknown'}} |
-                            <strong>Domain Controller:</strong> {{nmapResult.os_detection?.is_domain_controller ? 'Yes' : 'No'}}
-                        </p>
-                        <div v-if="nmapResult.os_detection?.dc_info" class="text-xs text-blue-600 mt-1">
-                            <strong>Domain:</strong> {{nmapResult.os_detection.dc_info.domain}} |
-                            <strong>Site:</strong> {{nmapResult.os_detection.dc_info.site}}
+                    <div class="service-info">
+                        <h3 class="font-bold text-lg mb-3">🔍 Scan Summary</h3>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <span class="opacity-80">Status:</span>
+                                <div class="font-semibold">{{nmapResult.status}}</div>
+                            </div>
+                            <div>
+                                <span class="opacity-80">Open Ports:</span>
+                                <div class="font-semibold">{{nmapResult.open_ports?.length || 0}}</div>
+                            </div>
+                            <div>
+                                <span class="opacity-80">OS:</span>
+                                <div class="font-semibold">{{getOSInfo(nmapResult)}}</div>
+                            </div>
+                            <div>
+                                <span class="opacity-80">Domain Controller:</span>
+                                <div class="font-semibold">{{isDomainController(nmapResult) ? '🏰 Yes' : '❌ No'}}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Service Info Display -->
+                        <div v-if="getServiceInfo(nmapResult)" class="mt-4 pt-3 border-t border-blue-400 border-opacity-30">
+                            <h4 class="font-semibold mb-2">📋 Service Information</h4>
+                            <div class="text-sm opacity-90" v-html="getServiceInfo(nmapResult)"></div>
+                        </div>
+                        
+                        <!-- DC Info if available -->
+                        <div v-if="nmapResult.os_detection?.dc_info" class="mt-4 pt-3 border-t border-blue-400 border-opacity-30">
+                            <h4 class="font-semibold mb-2">🏰 Domain Controller Info</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm opacity-90">
+                                <div><strong>Domain:</strong> {{nmapResult.os_detection.dc_info.domain}}</div>
+                                <div><strong>Site:</strong> {{nmapResult.os_detection.dc_info.site}}</div>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Port Table or No Ports Message -->
-                    <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0">
+                    <!-- Port Table -->
+                    <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0" class="mt-4">
                         <table class="w-full text-sm border-collapse">
                             <thead>
                                 <tr class="bg-gray-100">
@@ -116,13 +188,11 @@
                         </table>
                     </div>
                     
-                    <!-- No Ports Found Message -->
+                    <!-- No Ports Message -->
                     <div v-else-if="nmapResult.status === 'completed'" class="mt-2 p-3 bg-gray-50 rounded border-l-4 border-yellow-400">
                         <div class="flex">
-                            <div class="flex-shrink-0">
-                                <span class="text-yellow-400">⚠️</span>
-                            </div>
-                            <div class="ml-3">
+                            <span class="text-yellow-400 mr-3">⚠️</span>
+                            <div>
                                 <p class="text-sm text-gray-700">
                                     <strong>No open ports detected</strong><br>
                                     The target may be down, behind a firewall, or all ports are closed/filtered.
@@ -131,22 +201,7 @@
                         </div>
                     </div>
                     
-                    <!-- Scan Failed Message -->
-                    <div v-else-if="nmapResult.status === 'failed'" class="mt-2 p-3 bg-red-50 rounded border-l-4 border-red-400">
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <span class="text-red-400">❌</span>
-                            </div>
-                            <div class="ml-3">
-                                <p class="text-sm text-red-700">
-                                    <strong>Scan failed</strong><br>
-                                    Please check the target IP address and try again.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Raw Output Section (Collapsible) -->
+                    <!-- Raw Output Toggle -->
                     <div v-if="nmapResult.raw_output" class="mt-3">
                         <button @click="showRawOutput = !showRawOutput" 
                                 class="text-sm text-gray-600 hover:text-gray-800 underline">
@@ -155,14 +210,6 @@
                         <div v-if="showRawOutput" class="mt-2 p-2 bg-gray-900 text-green-400 rounded text-xs overflow-auto max-h-64">
                             <pre>{{nmapResult.raw_output}}</pre>
                         </div>
-                    </div>
-                </div>
-                
-                <!-- Scanning in Progress -->
-                <div v-else-if="currentStep === 'nmap'" class="mt-2 p-3 bg-blue-50 rounded">
-                    <div class="flex items-center">
-                        <div class="pulse-ani text-blue-600 mr-2">🔍</div>
-                        <span class="text-blue-800">Scanning ports...</span>
                     </div>
                 </div>
             </div>
@@ -178,39 +225,62 @@
                     <h2 class="text-xl font-bold flex-1">CVE Analysis</h2>
                     <button v-if="nmapComplete && !analysisComplete" @click="runStep('analyze')" class="bg-green-500 text-white px-3 py-1 rounded">Run</button>
                 </div>
-                <div v-if="analystResult?.identified_cves?.length" class="mt-2 space-y-3">
-                    <div v-for="cve in analystResult.identified_cves" class="border p-3 rounded">
-                        <div class="flex justify-between items-start mb-2">
-                            <span class="font-bold text-lg">{{cve.cve_id}}</span>
-                            <span :class="getCvssClass(cve.cvss_score)" class="px-2 py-1 text-xs rounded text-white font-bold">{{cve.cvss_score}}</span>
-                        </div>
-                        
-                        <p class="text-sm mb-2 text-gray-700">{{cve.description}}</p>
-                        
-                        <!-- Detailed Explanation -->
-                        <div v-if="cve.xai_explanation" class="mb-3">
-                            <button @click="toggleCveDetails(cve.cve_id)" class="text-blue-600 text-sm font-medium">
-                                {{expandedCves[cve.cve_id] ? 'Hide Details' : 'Show Details'}}
-                            </button>
-                            <div v-if="expandedCves[cve.cve_id]" class="mt-2 p-3 bg-gray-50 rounded text-sm">
-                                <div v-html="formatCveExplanation(cve.xai_explanation)"></div>
+                
+                <div v-if="analystResult?.identified_cves?.length" class="mt-4 space-y-6">
+                    <div v-for="cve in analystResult.identified_cves" class="cve-card">
+                        <!-- CVE Header with Enhanced CVSS Display -->
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="font-bold text-2xl text-gray-800">{{cve.cve_id}}</h3>
+                                <p class="text-sm text-gray-600 mt-1">{{cve.severity}} Severity</p>
+                            </div>
+                            <div class="text-center">
+                                <div :class="getCvssClass(cve.cvss_score)" class="cvss-score">
+                                    {{cve.cvss_score || 'N/A'}}
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">CVSS Score</p>
                             </div>
                         </div>
                         
-                        <!-- CVE Links -->
-                        <div v-if="cve.cve_links" class="flex flex-wrap gap-2">
-                            <a v-for="(url, name) in cve.cve_links" :href="url" target="_blank" 
-                               class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200">
-                                {{name.toUpperCase()}}
-                            </a>
+                        <!-- CVE Description -->
+                        <div class="cve-description">
+                            <p class="text-gray-700 leading-relaxed">{{cve.description}}</p>
                         </div>
                         
-                        <!-- Exploit Availability -->
-                        <div class="mt-2">
-                            <span :class="cve.exploit_available ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'" 
-                                  class="text-xs px-2 py-1 rounded">
-                                {{cve.exploit_available ? '⚠️ Exploit Available' : '✅ No Known Exploits'}}
-                            </span>
+                        <!-- Detailed Explanation -->
+                        <div v-if="cve.xai_explanation" class="mb-4">
+                            <button @click="toggleCveDetails(cve.cve_id)" 
+                                    class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors font-medium">
+                                {{expandedCves[cve.cve_id] ? '🔽 Hide Details' : '🔼 Show Detailed Analysis'}}
+                            </button>
+                            <div v-if="expandedCves[cve.cve_id]" class="mt-4 p-4 bg-gray-50 rounded-lg">
+                                <div class="prose text-sm text-gray-700" v-html="formatCveExplanation(cve.xai_explanation)"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- CVE Reference Links -->
+                        <div v-if="cve.cve_links" class="mb-4">
+                            <h4 class="font-semibold text-gray-800 mb-3">🔗 References</h4>
+                            <div class="flex flex-wrap gap-3">
+                                <a v-for="(url, name) in cve.cve_links" :href="url" target="_blank" 
+                                   :class="getLinkClass(name)"
+                                   class="px-4 py-2 rounded-lg font-medium transition-colors">
+                                    {{getLinkIcon(name)}} {{name.toUpperCase()}}
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <!-- Exploit Availability Status -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span :class="cve.exploit_available ? 'bg-red-100 text-red-800 border-red-200' : 'bg-green-100 text-green-800 border-green-200'" 
+                                      class="px-4 py-2 rounded-lg font-medium border">
+                                    {{cve.exploit_available ? '🚨 Public Exploits Available' : '✅ No Known Public Exploits'}}
+                                </span>
+                            </div>
+                            <div v-if="cve.affected_service" class="text-sm text-gray-600">
+                                <strong>Affects:</strong> {{cve.affected_service}}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -255,10 +325,19 @@
                         
                         <div v-if="pocResult.available_pocs.length" class="space-y-3">
                             <div v-for="(poc, index) in pocResult.available_pocs" :key="index" 
-                                 class="border rounded p-3 bg-gray-50">
+                                 :class="poc.source === 'BreachPilot Built-in' ? 'border-2 border-green-400 bg-green-50' : 'bg-gray-50'"
+                                 class="border rounded p-3">
+                                
+                                <!-- PoC Header with Built-in Badge -->
                                 <div class="flex justify-between items-start mb-2">
                                     <div class="flex-1">
-                                        <h5 class="font-medium text-sm">{{poc.source}}</h5>
+                                        <div class="flex items-center">
+                                            <h5 class="font-medium text-sm">{{poc.source}}</h5>
+                                            <span v-if="poc.source === 'BreachPilot Built-in'" 
+                                                  class="ml-2 px-2 py-1 bg-green-600 text-white text-xs rounded-full">
+                                                🎯 READY TO EXECUTE
+                                            </span>
+                                        </div>
                                         <p class="text-xs text-gray-600 mb-1">{{poc.description}}</p>
                                         <div class="flex items-center space-x-2 text-xs text-gray-500">
                                             <span>👤 {{poc.author}}</span>
@@ -268,7 +347,8 @@
                                     </div>
                                     <button @click="executePoc(pocResult.cve_id, index)" 
                                             :disabled="isExecuting(pocResult.cve_id, index)"
-                                            class="bg-red-500 text-white px-3 py-1 text-xs rounded hover:bg-red-600 disabled:bg-gray-400">
+                                            :class="poc.source === 'BreachPilot Built-in' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'"
+                                            class="text-white px-3 py-1 text-xs rounded disabled:bg-gray-400">
                                         <span v-if="isExecuting(pocResult.cve_id, index)" class="spin">⭕</span>
                                         <span v-else>🎯</span>
                                         {{isExecuting(pocResult.cve_id, index) ? 'Running...' : 'Execute'}}
