@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BreachPilot - AI-Powered Penetration Testing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .cyber-gradient {
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+        }
+        .cyber-border {
+            border: 1px solid #00ff88;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+        .cyber-glow {
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+        }
+        .scan-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .matrix-bg {
+            background-image: 
+                radial-gradient(circle at 1px 1px, rgba(0,255,136,0.15) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        .cyber-card {
+            background: rgba(15, 15, 35, 0.9);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        .terminal-font {
+            font-family: 'Courier New', monospace;
+        }
+        .exploit-success {
+            background: linear-gradient(45deg, #00ff88, #00cc6a);
+            animation: success-glow 1s ease-in-out;
+        }
+        @keyframes success-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(0, 255, 136, 0.8); }
+        }
+        .vulnerability-critical {
+            background: linear-gradient(45deg, #ff0040, #cc0033);
+            animation: critical-pulse 2s ease-in-out infinite;
+        }
+        @keyframes critical-pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(255, 0, 64, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(255, 0, 64, 0.8); }
+        }
+        .loading-dots::after {
+            content: '';
+            animation: dots 2s infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body class="cyber-gradient min-h-screen text-green-400 matrix-bg">
+    <div id="app">
+        <!-- Header -->
+        <header class="relative overflow-hidden">
+            <div class="cyber-border bg-black bg-opacity-50 p-6">
+                <div class="container mx-auto flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <i class="fas fa-shield-virus text-3xl cyber-glow"></i>
+                        <h1 class="text-3xl font-bold cyber-glow terminal-font">BreachPilot</h1>
+                        <span class="text-sm opacity-75">AI-Powered Penetration Testing Platform</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div v-if="sessionId" class="cyber-card px-4 py-2 rounded">
+                            <i class="fas fa-microchip mr-2"></i>
+                            Session: {{ sessionId.substring(0, 8) }}...
+                        </div>
+                        <button @click="debugMode = !debugMode" 
+                                class="cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                            <i class="fas fa-bug mr-1"></i>
+                            {{ debugMode ? 'Debug ON' : 'Debug OFF' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-6 py-8">
+            
+            <!-- Target Input Section -->
+            <div v-if="!sessionId" class="max-w-2xl mx-auto">
+                <div class="cyber-card rounded-lg p-8 text-center">
+                    <div class="mb-8">
+                        <i class="fas fa-crosshairs text-6xl cyber-glow mb-4"></i>
+                        <h2 class="text-2xl font-bold mb-2 cyber-glow">Initialize Target Scan</h2>
+                        <p class="text-gray-400">Enter target IP address to begin automated vulnerability assessment</p>
+                    </div>
+                    
+                    <div class="space-y-6">
+                        <div class="relative">
+                            <input 
+                                v-model="targetIp" 
+                                @keyup.enter="startScan"
+                                type="text" 
+                                placeholder="192.168.1.100"
+                                class="w-full bg-black bg-opacity-50 cyber-border rounded-lg px-6 py-4 text-xl text-center terminal-font focus:outline-none focus:ring-2 focus:ring-green-400 transition-all"
+                            >
+                            <div class="absolute inset-0 rounded-lg bg-gradient-to-r from-transparent via-green-400 to-transparent opacity-0 hover:opacity-10 transition-opacity pointer-events-none"></div>
+                        </div>
+                        
+                        <button 
+                            @click="startScan" 
+                            :disabled="!targetIp || loading"
+                            class="w-full cyber-border bg-green-900 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-lg font-bold text-lg transition-all transform hover:scale-105"
+                        >
+                            <i class="fas fa-rocket mr-3"></i>
+                            <span v-if="!loading">INITIATE BREACH SEQUENCE</span>
+                            <span v-else class="loading-dots">INITIALIZING</span>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-8 grid grid-cols-3 gap-4 text-sm text-gray-400">
+                        <div class="cyber-card p-3 rounded">
+                            <i class="fas fa-search-location text-green-400 mb-2"></i>
+                            <div>OSINT Collection</div>
+                        </div>
+                        <div class="cyber-card p-3 rounded">
+                            <i class="fas fa-network-wired text-green-400 mb-2"></i>
+                            <div>Network Mapping</div>
+                        </div>
+                        <div class="cyber-card p-3 rounded">
+                            <i class="fas fa-bug text-green-400 mb-2"></i>
+                            <div>Exploit Execution</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scanning Dashboard -->
+            <div v-else class="space-y-6">
+                
+                <!-- Progress Pipeline -->
+                <div class="cyber-card rounded-lg p-6">
+                    <h3 class="text-xl font-bold mb-4 cyber-glow flex items-center">
+                        <i class="fas fa-tasks mr-3"></i>
+                        Penetration Testing Pipeline - {{ targetIp }}
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <!-- OSINT -->
+                        <div :class="['relative p-4 rounded-lg border-2 transition-all', 
+                                    osintComplete ? 'border-green-400 bg-green-900 bg-opacity-30' : 
+                                    currentStep === 'osint' ? 'border-yellow-400 bg-yellow-900 bg-opacity-30 scan-pulse' :
+                                    'border-gray-600 bg-gray-900 bg-opacity-30']">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold">OSINT</span>
+                                <i :class="[
+                                    'fas',
+                                    osintComplete ? 'fa-check text-green-400' :
+                                    currentStep === 'osint' ? 'fa-spinner fa-spin text-yellow-400' :
+                                    'fa-clock text-gray-400'
+                                ]"></i>
+                            </div>
+                            <div class="text-sm text-gray-400">Intelligence Gathering</div>
+                            <button v-if="!osintComplete && currentStep !== 'osint'" 
+                                    @click="runStep('osint')"
+                                    class="mt-2 w-full cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                Start OSINT
+                            </button>
+                        </div>
+
+                        <!-- Nmap -->
+                        <div :class="['relative p-4 rounded-lg border-2 transition-all', 
+                                    nmapComplete ? 'border-green-400 bg-green-900 bg-opacity-30' : 
+                                    currentStep === 'nmap' ? 'border-yellow-400 bg-yellow-900 bg-opacity-30 scan-pulse' :
+                                    'border-gray-600 bg-gray-900 bg-opacity-30']">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold">NMAP</span>
+                                <i :class="[
+                                    'fas',
+                                    nmapComplete ? 'fa-check text-green-400' :
+                                    currentStep === 'nmap' ? 'fa-spinner fa-spin text-yellow-400' :
+                                    'fa-clock text-gray-400'
+                                ]"></i>
+                            </div>
+                            <div class="text-sm text-gray-400">Network Scanning</div>
+                            <button v-if="osintComplete && !nmapComplete && currentStep !== 'nmap'" 
+                                    @click="runStep('nmap')"
+                                    class="mt-2 w-full cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                Start Nmap
+                            </button>
+                        </div>
+
+                        <!-- Analysis -->
+                        <div :class="['relative p-4 rounded-lg border-2 transition-all', 
+                                    analysisComplete ? 'border-green-400 bg-green-900 bg-opacity-30' : 
+                                    currentStep === 'analyze' ? 'border-yellow-400 bg-yellow-900 bg-opacity-30 scan-pulse' :
+                                    'border-gray-600 bg-gray-900 bg-opacity-30']">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold">ANALYSIS</span>
+                                <i :class="[
+                                    'fas',
+                                    analysisComplete ? 'fa-check text-green-400' :
+                                    currentStep === 'analyze' ? 'fa-spinner fa-spin text-yellow-400' :
+                                    'fa-clock text-gray-400'
+                                ]"></i>
+                            </div>
+                            <div class="text-sm text-gray-400">CVE Detection</div>
+                            <button v-if="nmapComplete && !analysisComplete && currentStep !== 'analyze'" 
+                                    @click="runStep('analyze')"
+                                    class="mt-2 w-full cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                Start Analysis
+                            </button>
+                        </div>
+
+                        <!-- Exploit -->
+                        <div :class="['relative p-4 rounded-lg border-2 transition-all', 
+                                    pocSearchStarted ? 'border-green-400 bg-green-900 bg-opacity-30' : 
+                                    currentStep === 'poc_search' ? 'border-yellow-400 bg-yellow-900 bg-opacity-30 scan-pulse' :
+                                    'border-gray-600 bg-gray-900 bg-opacity-30']">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold">EXPLOIT</span>
+                                <i :class="[
+                                    'fas',
+                                    pocSearchStarted ? 'fa-check text-green-400' :
+                                    currentStep === 'poc_search' ? 'fa-spinner fa-spin text-yellow-400' :
+                                    'fa-clock text-gray-400'
+                                ]"></i>
+                            </div>
+                            <div class="text-sm text-gray-400">PoC Execution</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CVE Analysis Results -->
+                <div v-if="analysisComplete && analystResult?.identified_cves?.length" class="cyber-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-xl font-bold cyber-glow flex items-center">
+                            <i class="fas fa-exclamation-triangle mr-3"></i>
+                            Identified Vulnerabilities
+                        </h3>
+                        <div class="flex items-center space-x-4">
+                            <div class="text-sm text-gray-400">
+                                Found {{ analystResult.identified_cves.length }} CVE(s)
+                            </div>
+                            <input v-model="pocLimit" type="number" min="1" max="10" 
+                                   class="w-16 bg-black bg-opacity-50 cyber-border rounded px-2 py-1 text-sm">
+                            <span class="text-sm">PoCs per CVE</span>
+                        </div>
+                    </div>
+
+                    <!-- CVE Selection -->
+                    <div class="space-y-4 mb-6">
+                        <div v-for="cve in analystResult.identified_cves" :key="cve.cve_id" 
+                             class="cyber-card p-4 rounded-lg hover:border-green-300 transition-colors">
+                            <div class="flex items-center justify-between">
+                                <label class="flex items-center space-x-4 cursor-pointer flex-1">
+                                    <input type="checkbox" :value="cve.cve_id" v-model="selectedCves"
+                                           class="w-4 h-4 text-green-400 rounded focus:ring-green-400">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="font-bold text-lg terminal-font">{{ cve.cve_id }}</span>
+                                            <span :class="['px-2 py-1 rounded text-xs font-bold', getCvssClass(cve.cvss_score)]">
+                                                CVSS: {{ cve.cvss_score || 'N/A' }}
+                                            </span>
+                                            <span v-if="cve.exploit_available" 
+                                                  class="px-2 py-1 bg-red-600 rounded text-xs font-bold">
+                                                EXPLOIT AVAILABLE
+                                            </span>
+                                        </div>
+                                        <div class="text-gray-400 mt-1">{{ cve.description }}</div>
+                                        <div class="text-sm text-gray-500 mt-1">
+                                            <i class="fas fa-server mr-1"></i>
+                                            {{ cve.affected_service }}
+                                        </div>
+                                    </div>
+                                </label>
+                                <button @click="toggleCveDetails(cve.cve_id)"
+                                        class="cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors ml-4">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </button>
+                            </div>
+                            
+                            <!-- CVE Details -->
+                            <div v-if="expandedCves[cve.cve_id]" class="mt-4 p-4 bg-black bg-opacity-50 rounded">
+                                <div v-html="formatCveExplanation(cve.xai_explanation)" class="text-sm text-gray-300"></div>
+                                <div v-if="cve.recommendation" class="mt-3 p-3 bg-blue-900 bg-opacity-30 rounded">
+                                    <strong class="text-blue-400">Recommendation:</strong>
+                                    <div class="text-sm text-gray-300 mt-1">{{ cve.recommendation }}</div>
+                                </div>
+                                <div v-if="cve.cve_links" class="mt-3 flex space-x-4">
+                                    <a v-for="(url, source) in cve.cve_links" :key="source" 
+                                       :href="url" target="_blank"
+                                       class="cyber-border px-2 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                        <i class="fas fa-external-link-alt mr-1"></i>
+                                        {{ source.toUpperCase() }}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search PoCs Button -->
+                    <div class="text-center">
+                        <button @click="searchPocs" 
+                                :disabled="!selectedCves.length || currentStep === 'poc_search'"
+                                class="cyber-border bg-blue-900 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-lg font-bold transition-all">
+                            <i class="fas fa-search mr-2"></i>
+                            <span v-if="currentStep !== 'poc_search'">Search PoCs for {{ selectedCves.length }} CVE(s)</span>
+                            <span v-else class="loading-dots">Searching PoCs</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PoC Results -->
+                <div v-if="pocSearchStarted && pocResults.length" class="cyber-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-xl font-bold cyber-glow flex items-center">
+                            <i class="fas fa-code mr-3"></i>
+                            Proof of Concept Exploits
+                        </h3>
+                        <div class="text-sm text-gray-400">
+                            {{ getTotalPoCs() }} total PoCs | {{ getGitHubRepos() }} GitHub repos
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div v-for="result in pocResults" :key="result.cve_id" class="cyber-card p-6 rounded-lg">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center space-x-4">
+                                    <h4 class="text-lg font-bold terminal-font">{{ result.cve_id }}</h4>
+                                    <span class="px-3 py-1 bg-green-900 rounded-full text-sm">
+                                        {{ result.available_pocs.length }} PoC(s) Available
+                                    </span>
+                                </div>
+                                <button @click="executeAllPocs(result.cve_id)"
+                                        class="cyber-border bg-red-900 hover:bg-red-700 px-4 py-2 rounded transition-all">
+                                    <i class="fas fa-rocket mr-2"></i>
+                                    Execute All PoCs
+                                </button>
+                            </div>
+
+                            <div class="grid gap-4">
+                                <div v-for="(poc, index) in result.available_pocs" :key="index" 
+                                     class="cyber-card p-4 rounded hover:border-green-300 transition-colors">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <div class="flex items-center space-x-3 mb-2">
+                                                <span class="font-bold">PoC #{{ index + 1 }}</span>
+                                                <span :class="['px-2 py-1 rounded text-xs', getSourceBadgeClass(poc.source)]">
+                                                    {{ poc.source }}
+                                                </span>
+                                                <span v-if="poc.stars > 0" class="text-yellow-400 text-sm">
+                                                    <i class="fas fa-star mr-1"></i>
+                                                    {{ poc.stars }}
+                                                </span>
+                                            </div>
+                                            <div class="text-gray-400 text-sm mb-2">{{ poc.description }}</div>
+                                            <a :href="poc.url" target="_blank" 
+                                               class="text-green-400 hover:text-green-300 text-sm break-all">
+                                                <i class="fas fa-external-link-alt mr-1"></i>
+                                                {{ poc.url }}
+                                            </a>
+                                        </div>
+                                        <div class="ml-4 space-x-2">
+                                            <button @click="executeSinglePoc(result.cve_id, index)"
+                                                    :disabled="isExecutingPoc(result.cve_id, index)"
+                                                    class="cyber-border bg-orange-900 hover:bg-orange-700 disabled:opacity-50 px-4 py-2 rounded transition-all">
+                                                <i v-if="!isExecutingPoc(result.cve_id, index)" class="fas fa-play mr-2"></i>
+                                                <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                                {{ isExecutingPoc(result.cve_id, index) ? 'Executing...' : 'Execute' }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Execution Results -->
+                                    <div v-for="exploitResult in getExploitResultsForPoc(result.cve_id, index)" 
+                                         :key="`${exploitResult.cve_id}-${exploitResult.poc_index}`"
+                                         :class="['mt-4 p-4 rounded', exploitResult.success ? 'bg-green-900 bg-opacity-30 border border-green-400' : 'bg-red-900 bg-opacity-30 border border-red-400']">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <div class="flex items-center space-x-3">
+                                                <i :class="[
+                                                    'fas',
+                                                    exploitResult.success ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'
+                                                ]"></i>
+                                                <span class="font-bold">
+                                                    {{ exploitResult.success ? 'SUCCESS' : 'FAILED' }}
+                                                </span>
+                                                <span class="text-sm text-gray-400">
+                                                    {{ formatTimestamp(exploitResult.timestamp) }}
+                                                </span>
+                                            </div>
+                                            <button @click="toggleExploitOutput(result.cve_id, index)"
+                                                    class="cyber-border px-2 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                                <i class="fas fa-eye mr-1"></i>
+                                                Details
+                                            </button>
+                                        </div>
+
+                                        <div v-if="expandedOutputs[`${result.cve_id}_${index}`]" class="space-y-3">
+                                            <div v-if="exploitResult.success && exploitResult.artifacts_captured?.length" 
+                                                 class="p-3 bg-green-800 bg-opacity-30 rounded">
+                                                <div class="font-bold text-green-400 mb-2">
+                                                    <i class="fas fa-trophy mr-2"></i>
+                                                    Captured Artifacts:
+                                                </div>
+                                                <div class="space-y-1">
+                                                    <div v-for="artifact in exploitResult.artifacts_captured" :key="artifact" 
+                                                         class="text-sm terminal-font text-green-300">
+                                                        {{ artifact }}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div v-if="exploitResult.execution_output" class="p-3 bg-black bg-opacity-50 rounded">
+                                                <div class="font-bold text-gray-400 mb-2">Execution Output:</div>
+                                                <pre class="text-xs terminal-font text-gray-300 whitespace-pre-wrap">{{ exploitResult.execution_output }}</pre>
+                                            </div>
+
+                                            <div class="flex space-x-4 text-sm text-gray-400">
+                                                <span><i class="fas fa-clock mr-1"></i>Time: {{ exploitResult.execution_time }}s</span>
+                                                <span><i class="fas fa-terminal mr-1"></i>Exit: {{ exploitResult.return_code }}</span>
+                                                <span v-if="exploitResult.exploit_used"><i class="fas fa-tool mr-1"></i>{{ exploitResult.exploit_used }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Debug Panel -->
+                <div v-if="debugMode" class="cyber-card rounded-lg p-6">
+                    <h3 class="text-lg font-bold mb-4 text-yellow-400">
+                        <i class="fas fa-bug mr-2"></i>
+                        Debug Information
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <div class="font-bold mb-2">Session Status:</div>
+                            <div class="space-y-1 text-gray-400">
+                                <div>Session ID: {{ sessionId }}</div>
+                                <div>Target IP: {{ targetIp }}</div>
+                                <div>Current Step: {{ currentStep || 'None' }}</div>
+                                <div>Selected CVEs: {{ selectedCves.length }}</div>
+                                <div>PoC Results: {{ pocResults.length }}</div>
+                                <div>Exploit Results: {{ exploitResults.length }}</div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="font-bold mb-2">Actions:</div>
+                            <div class="space-y-2">
+                                <button @click="inspectPocData" class="cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                    Inspect PoC Data
+                                </button>
+                                <button @click="loadResults" class="cyber-border px-3 py-1 rounded text-xs hover:bg-green-900 transition-colors">
+                                    Force Reload Results
+                                </button>
+                                <button @click="cleanupFiles" class="cyber-border px-3 py-1 rounded text-xs hover:bg-red-900 transition-colors">
+                                    Cleanup Files
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="flex justify-center space-x-4">
+                    <button @click="downloadResults" 
+                            class="cyber-border px-6 py-2 rounded hover:bg-green-900 transition-colors">
+                        <i class="fas fa-download mr-2"></i>
+                        Download Results
+                    </button>
+                    <button @click="reset" 
+                            class="cyber-border px-6 py-2 rounded hover:bg-red-900 transition-colors">
+                        <i class="fas fa-redo mr-2"></i>
+                        New Scan
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

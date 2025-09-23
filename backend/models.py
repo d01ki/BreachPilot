@@ -37,7 +37,19 @@ class NmapResult(BaseModel):
     raw_output: str = ""
     status: StepStatus = StepStatus.PENDING
 
+class CVEInfo(BaseModel):
+    """CVE Information model for new analyst system"""
+    cve_id: str
+    description: str = ""
+    severity: str = ""
+    cvss_score: Optional[float] = None
+    affected_service: str = ""
+    exploit_available: bool = False
+    cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
+    xai_explanation: str = ""  # Added for compatibility
+
 class CVEAnalysis(BaseModel):
+    """Legacy CVE Analysis model for backward compatibility"""
     timestamp: datetime = Field(default_factory=datetime.now)
     cve_id: str
     cvss_score: Optional[float] = None
@@ -48,7 +60,14 @@ class CVEAnalysis(BaseModel):
     recommendation: str = ""
     cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
 
+class AnalysisResult(BaseModel):
+    """New analysis result model"""
+    status: StepStatus = StepStatus.PENDING
+    identified_cves: List[CVEInfo] = Field(default_factory=list)
+    summary: str = ""
+
 class AnalystResult(BaseModel):
+    """Legacy analyst result for backward compatibility"""
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
     identified_cves: List[CVEAnalysis] = Field(default_factory=list)
@@ -63,6 +82,13 @@ class PoCInfo(BaseModel):
     author: str = ""
     stars: int = 0
     code: str = ""
+    filename: Optional[str] = None
+    execution_command: Optional[str] = None
+    file_extension: Optional[str] = None
+    code_language: Optional[str] = None
+    estimated_success_rate: Optional[float] = None
+    requires_dependencies: bool = False
+    dependencies: List[str] = Field(default_factory=list)
 
 class PoCResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -70,6 +96,9 @@ class PoCResult(BaseModel):
     available_pocs: List[PoCInfo] = Field(default_factory=list)
     selected_poc: Optional[PoCInfo] = None
     status: StepStatus = StepStatus.PENDING
+    total_found: int = 0
+    with_code: int = 0
+    search_duration: Optional[float] = None
 
 class ExploitResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -80,6 +109,21 @@ class ExploitResult(BaseModel):
     success: bool = False
     artifacts_captured: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
+    poc_index: Optional[int] = None
+    poc_source: Optional[str] = None
+    poc_url: Optional[str] = None
+    execution_time: Optional[float] = None
+    execution_command: Optional[str] = None
+    failure_reason: Optional[str] = None
+    success_indicators: List[str] = Field(default_factory=list)
+    exploit_filename: Optional[str] = None
+    return_code: Optional[int] = None
+    evidence: List[str] = Field(default_factory=list)
+    environment_info: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    
+    # Added fields for compatibility
+    vulnerability_confirmed: bool = False
+    exploit_successful: bool = False
 
 class ReportData(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
