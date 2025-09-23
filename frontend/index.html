@@ -216,102 +216,99 @@
                 </div>
             </div>
 
-            <!-- Zerologon CVE-2020-1472 PoC Section -->
-            <div class="bg-white p-4 rounded shadow border-l-4 border-red-500">
+            <!-- PoC Search Section -->
+            <div v-if="analysisComplete && analystResult?.identified_cves?.length" class="bg-white p-4 rounded shadow">
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <h2 class="text-xl font-bold text-red-700">⚡ CVE-2020-1472 (Zerologon) PoC</h2>
-                        <p class="text-sm text-gray-600 mt-1">Test Domain Controller for Zerologon vulnerability</p>
+                        <h2 class="text-xl font-bold">🔍 PoC Search & Execute</h2>
+                        <p class="text-sm text-gray-600 mt-1">Search for Proof-of-Concept exploits for identified CVEs</p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <input v-model="zerologonDcName" placeholder="DC Name (e.g., DC01)" 
-                               class="border px-2 py-1 text-sm rounded" :disabled="zerologonExecuting">
-                        <button @click="executeZerologon" 
-                                :disabled="!targetIp || zerologonExecuting"
-                                class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400 flex items-center">
-                            <span v-if="zerologonExecuting" class="spin mr-2">⭕</span>
-                            {{zerologonExecuting ? 'Testing...' : '🎯 Test Zerologon'}}
+                        <button @click="searchPoCs" 
+                                :disabled="!getSelectedCves().length || pocSearching"
+                                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 flex items-center">
+                            <span v-if="pocSearching" class="spin mr-2">⭕</span>
+                            {{pocSearching ? 'Searching...' : '🔍 Search PoCs'}}
                         </button>
                     </div>
                 </div>
                 
-                <!-- Zerologon Warning -->
-                <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <span class="text-yellow-600">⚠️</span>
-                        </div>
-                        <div class="ml-2">
-                            <p class="text-sm text-yellow-800">
-                                <strong>Warning:</strong> This exploit will reset the domain controller's machine account password to an empty string if successful. 
-                                This can break domain functionality. Use only in authorized testing environments.
-                            </p>
-                        </div>
+                <!-- CVE Selection -->
+                <div class="mb-4">
+                    <h3 class="font-medium mb-2">Select CVEs for PoC Search:</h3>
+                    <div class="space-y-2">
+                        <label v-for="cve in analystResult.identified_cves" :key="cve.cve_id" class="flex items-center">
+                            <input type="checkbox" :value="cve.cve_id" v-model="selectedCves" class="mr-2">
+                            <span class="text-sm">{{cve.cve_id}} - {{cve.description.substring(0, 80)}}...</span>
+                        </label>
                     </div>
                 </div>
                 
-                <!-- Zerologon Results -->
-                <div v-if="zerologonResult" class="mt-4">
-                    <div class="border rounded-lg p-4" 
-                         :class="zerologonResult.success ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="flex items-center space-x-2">
-                                <span :class="zerologonResult.success ? 'text-red-600' : 'text-green-600'" class="font-bold">
-                                    {{zerologonResult.success ? '🚨 VULNERABLE' : '✅ NOT VULNERABLE'}}
-                                </span>
-                                <span class="text-xs text-gray-500">
-                                    {{formatTimestamp(zerologonResult.timestamp)}}
-                                </span>
-                                <span v-if="zerologonResult.execution_time" class="text-xs text-gray-500">
-                                    ({{zerologonResult.execution_time.toFixed(1)}}s)
-                                </span>
+                <!-- PoC Results -->
+                <div v-if="pocResults.length" class="space-y-4">
+                    <h3 class="font-bold text-lg">Found PoCs:</h3>
+                    <div v-for="pocResult in pocResults" :key="pocResult.cve_id" class="border rounded p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-lg text-blue-700">{{pocResult.cve_id}}</h4>
+                            <span class="text-sm text-gray-600">{{pocResult.available_pocs.length}} PoCs found</span>
+                        </div>
+                        
+                        <div v-if="pocResult.available_pocs.length" class="space-y-3">
+                            <div v-for="(poc, index) in pocResult.available_pocs" :key="index" 
+                                 class="border rounded p-3 bg-gray-50">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="flex-1">
+                                        <h5 class="font-medium text-sm">{{poc.source}}</h5>
+                                        <p class="text-xs text-gray-600 mb-1">{{poc.description}}</p>
+                                        <div class="flex items-center space-x-2 text-xs text-gray-500">
+                                            <span>👤 {{poc.author}}</span>
+                                            <span v-if="poc.stars">⭐ {{poc.stars}}</span>
+                                            <a :href="poc.url" target="_blank" class="text-blue-600 hover:underline">View Source</a>
+                                        </div>
+                                    </div>
+                                    <button @click="executePoc(pocResult.cve_id, index)" 
+                                            :disabled="isExecuting(pocResult.cve_id, index)"
+                                            class="bg-red-500 text-white px-3 py-1 text-xs rounded hover:bg-red-600 disabled:bg-gray-400">
+                                        <span v-if="isExecuting(pocResult.cve_id, index)" class="spin">⭕</span>
+                                        <span v-else>🎯</span>
+                                        {{isExecuting(pocResult.cve_id, index) ? 'Running...' : 'Execute'}}
+                                    </button>
+                                </div>
+                                
+                                <!-- PoC Code Display -->
+                                <div v-if="poc.code" class="mt-2">
+                                    <button @click="togglePocCode(pocResult.cve_id, index)" 
+                                            class="text-xs text-blue-600 hover:underline mb-2">
+                                        {{isPocCodeVisible(pocResult.cve_id, index) ? 'Hide Code' : 'Show Code'}}
+                                    </button>
+                                    <div v-if="isPocCodeVisible(pocResult.cve_id, index)" 
+                                         class="code-block p-2 rounded text-xs overflow-auto max-h-48">
+                                        <pre>{{poc.code}}</pre>
+                                    </div>
+                                </div>
+                                
+                                <!-- Execution Results -->
+                                <div v-if="getExploitResult(pocResult.cve_id, index)" class="mt-3 border-t pt-2">
+                                    <div class="execution-result" 
+                                         :class="getExploitResult(pocResult.cve_id, index).success ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'"
+                                         class="border rounded p-2">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span :class="getExploitResult(pocResult.cve_id, index).success ? 'text-red-600' : 'text-green-600'" 
+                                                  class="text-sm font-bold">
+                                                {{getExploitResult(pocResult.cve_id, index).success ? '🚨 VULNERABLE' : '✅ NOT VULNERABLE'}}
+                                            </span>
+                                            <button @click="toggleExploitOutput(pocResult.cve_id, index)" 
+                                                    class="text-xs text-blue-600 hover:underline">
+                                                {{isExploitOutputVisible(pocResult.cve_id, index) ? 'Hide' : 'Show'}} Output
+                                            </button>
+                                        </div>
+                                        
+                                        <div v-if="isExploitOutputVisible(pocResult.cve_id, index)" class="mt-2">
+                                            <pre class="code-block p-2 rounded text-xs overflow-auto max-h-32">{{getExploitResult(pocResult.cve_id, index).execution_output || 'No output'}}</pre>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <button @click="toggleZerologonOutput" 
-                                    class="text-xs text-blue-600 hover:underline">
-                                {{showZerologonOutput ? 'Hide' : 'Show'}} Output
-                            </button>
-                        </div>
-                        
-                        <!-- Target Info -->
-                        <div class="mb-3 text-sm">
-                            <span class="text-gray-600"><strong>Target:</strong> {{zerologonResult.target_ip}}</span>
-                            <span class="ml-4 text-gray-600"><strong>DC Name:</strong> {{zerologonResult.dc_name}}</span>
-                        </div>
-                        
-                        <!-- Vulnerability Status -->
-                        <div v-if="zerologonResult.vulnerability_confirmed" class="mb-3">
-                            <div class="text-xs text-gray-600 mb-1">Vulnerability Status:</div>
-                            <div class="flex flex-wrap gap-1">
-                                <span class="bg-red-100 text-red-800 px-2 py-1 text-xs rounded">
-                                    Vulnerability Confirmed
-                                </span>
-                                <span v-if="zerologonResult.exploit_successful" class="bg-red-100 text-red-800 px-2 py-1 text-xs rounded">
-                                    Exploit Successful
-                                </span>
-                            </div>
-                        </div>
-                        
-                        <!-- Artifacts -->
-                        <div v-if="zerologonResult.artifacts?.length" class="mb-3">
-                            <div class="text-xs text-gray-600 mb-1">Impact:</div>
-                            <div class="bg-yellow-50 p-2 rounded text-xs">
-                                <ul class="list-disc list-inside space-y-1">
-                                    <li v-for="artifact in zerologonResult.artifacts" :key="artifact" 
-                                        class="text-yellow-800">{{artifact}}</li>
-                                </ul>
-                            </div>
-                        </div>
-                        
-                        <!-- Command Used -->
-                        <div v-if="zerologonResult.command" class="mb-3">
-                            <div class="text-xs text-gray-600 mb-1">Command Executed:</div>
-                            <code class="text-xs bg-gray-100 p-1 rounded block">{{zerologonResult.command}}</code>
-                        </div>
-                        
-                        <!-- Execution Output -->
-                        <div v-if="showZerologonOutput" class="mt-2">
-                            <div class="text-xs text-gray-600 mb-1">Execution Output:</div>
-                            <pre class="code-block p-3 rounded text-xs overflow-auto max-h-48 border">{{zerologonResult.execution_output || 'No output'}}</pre>
                         </div>
                     </div>
                 </div>
@@ -322,9 +319,9 @@
                 <div class="flex items-center justify-between">
                     <button @click="reset" class="bg-red-500 text-white px-4 py-2 rounded">New Scan</button>
                     <div class="flex items-center space-x-2">
-                        <button v-if="zerologonResult" @click="downloadZerologonResults" 
+                        <button v-if="exploitResults.length" @click="downloadResults" 
                                 class="bg-blue-500 text-white px-3 py-2 text-sm rounded">
-                            Download Zerologon Results
+                            Download Results
                         </button>
                     </div>
                 </div>
