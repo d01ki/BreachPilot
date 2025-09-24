@@ -34,17 +34,6 @@ async def start_scan(request: ScanRequest):
         logger.error(f"Failed to start scan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/scan/{session_id}/osint")
-async def run_osint(session_id: str):
-    try:
-        logger.info(f"Running OSINT for session: {session_id}")
-        result = orchestrator.run_osint(session_id)
-        logger.info(f"OSINT completed for session: {session_id}")
-        return result.model_dump()
-    except Exception as e:
-        logger.error(f"OSINT failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/api/scan/{session_id}/nmap")
 async def run_nmap(session_id: str):
     try:
@@ -221,9 +210,8 @@ async def get_results(session_id: str):
     try:
         session = orchestrator._get_session(session_id)
         
-        # Build response with detailed logging
+        # Build response without OSINT
         response = {
-            "osint_result": session.osint_result.model_dump() if session.osint_result else None,
             "nmap_result": session.nmap_result.model_dump() if session.nmap_result else None,
             "analyst_result": session.analyst_result.model_dump() if session.analyst_result else None,
             "poc_results": [p.model_dump() for p in session.poc_results] if session.poc_results else [],
