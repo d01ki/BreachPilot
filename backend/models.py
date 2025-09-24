@@ -26,7 +26,7 @@ class NmapResult(BaseModel):
     status: StepStatus = StepStatus.PENDING
 
 class CVEInfo(BaseModel):
-    """CVE Information model for new analyst system"""
+    """Professional CVE Information model"""
     cve_id: str
     description: str = ""
     severity: str = ""
@@ -34,31 +34,13 @@ class CVEInfo(BaseModel):
     affected_service: str = ""
     exploit_available: bool = False
     cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
-    xai_explanation: str = ""  # Added for compatibility
-
-class CVEAnalysis(BaseModel):
-    """Legacy CVE Analysis model for backward compatibility"""
-    timestamp: datetime = Field(default_factory=datetime.now)
-    cve_id: str
-    cvss_score: Optional[float] = None
-    description: str = ""
-    affected_service: str = ""
-    xai_explanation: str = ""
-    exploit_available: bool = False
-    recommendation: str = ""
-    cve_links: Optional[Dict[str, str]] = Field(default_factory=dict)
-
-class AnalysisResult(BaseModel):
-    """New analysis result model"""
-    status: StepStatus = StepStatus.PENDING
-    identified_cves: List[CVEInfo] = Field(default_factory=list)
-    summary: str = ""
+    technical_details: str = ""  # Professional technical analysis
 
 class AnalystResult(BaseModel):
-    """Updated analyst result without legacy fields"""
+    """Professional analyst result"""
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
-    identified_cves: List[CVEInfo] = Field(default_factory=list)  # Changed from CVEAnalysis to CVEInfo
+    identified_cves: List[CVEInfo] = Field(default_factory=list)
     risk_assessment: str = ""
     priority_vulnerabilities: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
@@ -114,21 +96,29 @@ class ExploitResult(BaseModel):
     exploit_successful: bool = False
 
 class ReportData(BaseModel):
+    """Professional security assessment report data"""
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
+    report_type: str = "Professional Security Assessment"
+    assessment_date: str = ""
+    executive_summary: str = ""
+    technical_findings: str = ""
+    recommendations: str = ""
+    findings_count: int = 0
+    critical_issues: int = 0
+    successful_exploits: int = 0
+    report_url: Optional[str] = None
+    pdf_url: Optional[str] = None
     nmap_result: Optional[NmapResult] = None
     analyst_result: Optional[AnalystResult] = None
     poc_results: List[PoCResult] = Field(default_factory=list)
     exploit_results: List[ExploitResult] = Field(default_factory=list)
-    executive_summary: str = ""
-    markdown_report: str = ""
-    pdf_path: Optional[str] = None
 
 class ScanSession(BaseModel):
     session_id: str
     target_ip: str
     created_at: datetime = Field(default_factory=datetime.now)
-    current_step: str = "nmap"  # Changed default from osint to nmap
+    current_step: str = "nmap"
     nmap_result: Optional[NmapResult] = None
     analyst_result: Optional[AnalystResult] = None
     poc_results: List[PoCResult] = Field(default_factory=list)
