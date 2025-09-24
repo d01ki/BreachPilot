@@ -3,7 +3,6 @@ import uuid
 import asyncio
 from typing import Dict, Any, List
 from backend.models import ScanSession, ScanRequest, PoCResult, PoCInfo, ExploitResult
-from backend.scanners.osint_scanner import OSINTScanner
 from backend.scanners.nmap_scanner import NmapScanner
 from backend.agents.analyst_crew import AnalystCrew
 from backend.agents.poc_crew import PoCCrew
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 class ScanOrchestrator:
     def __init__(self):
         self.sessions: Dict[str, ScanSession] = {}
-        self.osint_scanner = OSINTScanner()
         self.nmap_scanner = NmapScanner()
         self.analyst_crew = AnalystCrew()
         self.poc_crew = PoCCrew()
@@ -25,52 +23,47 @@ class ScanOrchestrator:
         self.zerologon_executor = ZerologonExecutor()
     
     def start_scan(self, request: ScanRequest) -> ScanSession:
-        """Start scan and automatically run OSINT and Nmap"""
+        """Start scan - only create session, don't auto-run anything"""
         session_id = str(uuid.uuid4())
         session = ScanSession(session_id=session_id, target_ip=request.target_ip)
         self.sessions[session_id] = session
         self._save_session(session)
         
-        # Auto-run OSINT and Nmap
-        logger.info(f"🚀 Auto-starting OSINT and Nmap for {request.target_ip}")
+        logger.info(f"🚀 Session created for {request.target_ip}")
+        return session
+    
+    def run_nmap(self, session_id: str):
+        """Run Nmap scan"""
+        session = self._get_session(session_id)
+        logger.info(f"🔍 Starting Nmap scan for {session.target_ip}")
+        
         try:
-            # Run OSINT first
-            session.osint_result = self.osint_scanner.scan(session.target_ip)
-            session.current_step = "nmap"
-            self._save_session(session)
-            
-            # Run Nmap
             session.nmap_result = self.nmap_scanner.scan(session.target_ip)
             session.current_step = "analysis"
             self._save_session(session)
-            
-            logger.info(f"✅ Auto-scan completed for {request.target_ip}")
-            
+            logger.info(f"✅ Nmap scan completed for {session.target_ip}")
+            return session.nmap_result
         except Exception as e:
-            logger.error(f"❌ Auto-scan failed: {e}")
-            # Continue with partial results
-            
-        return session
-    
-    def run_osint(self, session_id: str):
-        session = self._get_session(session_id)
-        session.osint_result = self.osint_scanner.scan(session.target_ip)
-        self._save_session(session)
-        return session.osint_result
-    
-    def run_nmap(self, session_id: str):
-        session = self._get_session(session_id)
-        session.nmap_result = self.nmap_scanner.scan(session.target_ip)
-        self._save_session(session)
-        return session.nmap_result
+            logger.error(f"❌ Nmap scan failed: {e}")
+            raise e
     
     def run_analysis(self, session_id: str):
+        """Run CVE analysis"""
         session = self._get_session(session_id)
         if not session.nmap_result:
-            raise ValueError("Nmap must be completed")
-        session.analyst_result = self.analyst_crew.analyze_vulnerabilities(session.target_ip, session.nmap_result)
-        self._save_session(session)
-        return session.analyst_result
+            raise ValueError("Nmap scan must be completed first")
+        
+        logger.info(f"🔍 Starting CVE analysis for {session.target_ip}")
+        
+        try:
+            session.analyst_result = self.analyst_crew.analyze_vulnerabilities(session.target_ip, session.nmap_result)
+            session.current_step = "poc_search"
+            self._save_session(session)
+            logger.info(f"✅ CVE analysis completed for {session.target_ip}")
+            return session.analyst_result
+        except Exception as e:
+            logger.error(f"❌ CVE analysis failed: {e}")
+            raise e
     
     def search_pocs_for_cves(self, session_id: str, selected_cves: List[str], limit: int = 4) -> List[PoCResult]:
         """Enhanced PoC search with Zerologon auto-preparation"""
@@ -307,11 +300,10 @@ class ScanOrchestrator:
             "session_id": session.session_id,
             "target_ip": session.target_ip,
             "current_step": session.current_step,
-            "osint_complete": session.osint_result is not None,
             "nmap_complete": session.nmap_result is not None,
             "analysis_complete": session.analyst_result is not None,
-            "pocs_found": len(session.poc_results),
-            "exploits_run": len(session.exploit_results),
+            "pocs_found": len(session.poc_results) if session.poc_results else 0,
+            "exploits_run": len(session.exploit_results) if session.exploit_results else 0,
             "poc_summary": poc_summary,
             "exploit_summary": exploit_summary
         }
