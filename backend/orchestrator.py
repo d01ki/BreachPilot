@@ -57,6 +57,7 @@ class ScanOrchestrator:
         
         try:
             session.analyst_result = self.analyst_crew.analyze_vulnerabilities(session.target_ip, session.nmap_result)
+            session.current_step = "poc_search"
             self._save_session(session)
             logger.info(f"✅ CVE analysis completed for {session.target_ip}")
             return session.analyst_result
@@ -301,8 +302,8 @@ class ScanOrchestrator:
             "current_step": session.current_step,
             "nmap_complete": session.nmap_result is not None,
             "analysis_complete": session.analyst_result is not None,
-            "pocs_found": len(session.poc_results),
-            "exploits_run": len(session.exploit_results),
+            "pocs_found": len(session.poc_results) if session.poc_results else 0,
+            "exploits_run": len(session.exploit_results) if session.exploit_results else 0,
             "poc_summary": poc_summary,
             "exploit_summary": exploit_summary
         }
