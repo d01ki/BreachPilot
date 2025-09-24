@@ -15,18 +15,6 @@ class ScanRequest(BaseModel):
     target_ip: str = Field(..., description="Target IP address")
     scan_options: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
-class OSINTResult(BaseModel):
-    timestamp: datetime = Field(default_factory=datetime.now)
-    target_ip: str
-    hostname: Optional[str] = None
-    domain: Optional[str] = None
-    subdomains: List[str] = Field(default_factory=list)
-    dns_info: List[str] = Field(default_factory=list)
-    whois_info: Optional[Dict[str, Any]] = None
-    public_services: List[Dict[str, Any]] = Field(default_factory=list)
-    shodan_data: Optional[Dict[str, Any]] = None
-    status: StepStatus = StepStatus.PENDING
-
 class NmapResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
@@ -67,10 +55,10 @@ class AnalysisResult(BaseModel):
     summary: str = ""
 
 class AnalystResult(BaseModel):
-    """Legacy analyst result for backward compatibility"""
+    """Updated analyst result without legacy fields"""
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
-    identified_cves: List[CVEAnalysis] = Field(default_factory=list)
+    identified_cves: List[CVEInfo] = Field(default_factory=list)  # Changed from CVEAnalysis to CVEInfo
     risk_assessment: str = ""
     priority_vulnerabilities: List[str] = Field(default_factory=list)
     status: StepStatus = StepStatus.PENDING
@@ -128,7 +116,6 @@ class ExploitResult(BaseModel):
 class ReportData(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
-    osint_result: Optional[OSINTResult] = None
     nmap_result: Optional[NmapResult] = None
     analyst_result: Optional[AnalystResult] = None
     poc_results: List[PoCResult] = Field(default_factory=list)
@@ -141,8 +128,7 @@ class ScanSession(BaseModel):
     session_id: str
     target_ip: str
     created_at: datetime = Field(default_factory=datetime.now)
-    current_step: str = "osint"
-    osint_result: Optional[OSINTResult] = None
+    current_step: str = "nmap"  # Changed default from osint to nmap
     nmap_result: Optional[NmapResult] = None
     analyst_result: Optional[AnalystResult] = None
     poc_results: List[PoCResult] = Field(default_factory=list)
