@@ -19,7 +19,11 @@ createApp({
             exploitResults: [],
             executingPocs: {},
             visiblePocCode: {},
-            visibleExploitOutput: {}
+            visibleExploitOutput: {},
+            
+            // Report generation
+            reportGenerating: false,
+            reportResult: null
         }
     },
     
@@ -37,10 +41,10 @@ createApp({
                     target_ip: this.targetIp
                 });
                 this.sessionId = response.data.session_id;
-                console.log('🚀 Scan session started:', this.sessionId);
+                console.log('Security assessment session started:', this.sessionId);
             } catch (error) {
-                console.error('Error starting scan:', error);
-                alert('Failed to start scan');
+                console.error('Error starting assessment:', error);
+                alert('Failed to start security assessment: ' + (error.response?.data?.detail || error.message));
             }
         },
         
@@ -52,19 +56,33 @@ createApp({
                     case 'nmap':
                         response = await axios.post(`/api/scan/${this.sessionId}/nmap`);
                         this.nmapResult = response.data;
-                        console.log('✅ Nmap scan completed:', this.nmapResult);
+                        console.log('Network scan completed:', this.nmapResult);
                         break;
                     case 'analyze':
                         response = await axios.post(`/api/scan/${this.sessionId}/analyze`);
                         this.analystResult = response.data;
-                        console.log('✅ CVE analysis completed:', this.analystResult);
+                        console.log('Vulnerability analysis completed:', this.analystResult);
                         break;
                 }
                 this.currentStep = null;
             } catch (error) {
-                console.error(`Error running ${step}:`, error);
-                alert(`Failed to run ${step}: ${error.response?.data?.detail || error.message}`);
+                console.error(`Error executing ${step}:`, error);
+                alert(`Failed to execute ${step}: ${error.response?.data?.detail || error.message}`);
                 this.currentStep = null;
+            }
+        },
+        
+        // Status indicator methods
+        getStatusClass(step) {
+            if (this.currentStep === step) return 'status-running';
+            
+            switch(step) {
+                case 'nmap':
+                    return this.nmapComplete ? 'status-completed' : 'status-pending';
+                case 'analyze':
+                    return this.analysisComplete ? 'status-completed' : 'status-pending';
+                default:
+                    return 'status-pending';
             }
         },
         
@@ -72,15 +90,13 @@ createApp({
         getServiceInfo(nmapResult) {
             if (!nmapResult || !nmapResult.raw_output) return null;
             
-            // Extract Service Info line from raw output
             const match = nmapResult.raw_output.match(/Service Info:\s*(.+?)(?:\n|$)/);
             if (match) {
                 const serviceInfo = match[1].trim();
-                // Format service info with icons and better display
                 return serviceInfo
-                    .replace(/Host:\s*([^;]+)/g, '<strong>🖥️ Host:</strong> $1')
-                    .replace(/OS:\s*([^;]+)/g, '<strong>💻 OS:</strong> $1')
-                    .replace(/CPE:\s*([^;]+)/g, '<strong>🔧 CPE:</strong> <code class="text-xs">$1</code>');
+                    .replace(/Host:\s*([^;]+)/g, '<strong>Host:</strong> $1')
+                    .replace(/OS:\s*([^;]+)/g, '<strong>Operating System:</strong> $1')
+                    .replace(/CPE:\s*([^;]+)/g, '<strong>Common Platform Enumeration:</strong> <code class="text-xs">$1</code>');
             }
             return null;
         },
@@ -90,7 +106,6 @@ createApp({
                 return nmapResult.os_detection.name;
             }
             
-            // Extract from Service Info as fallback
             if (nmapResult?.raw_output) {
                 const match = nmapResult.raw_output.match(/OS:\s*([^;,\n]+)/);
                 if (match) {
@@ -98,16 +113,14 @@ createApp({
                 }
             }
             
-            return 'Unknown';
+            return 'Not Detected';
         },
         
         isDomainController(nmapResult) {
-            // Check explicit DC detection
             if (nmapResult?.os_detection?.is_domain_controller) {
                 return true;
             }
             
-            // Check for common DC indicators in raw output
             if (nmapResult?.raw_output) {
                 const dcIndicators = [
                     /microsoft.*windows.*server/i,
@@ -115,15 +128,59 @@ createApp({
                     /active.*directory/i,
                     /ldap/i,
                     /kerberos/i,
-                    /port.*389.*open/i,  // LDAP
-                    /port.*636.*open/i,  // LDAPS
-                    /port.*88.*open/i    // Kerberos
+                    /port.*389.*open/i,
+                    /port.*636.*open/i,
+                    /port.*88.*open/i
                 ];
                 
                 return dcIndicators.some(pattern => pattern.test(nmapResult.raw_output));
             }
             
             return false;
+        },
+        
+        // CVE Analysis Methods
+        getSeverityBadgeClass(severity) {
+            const sev = severity?.toLowerCase();
+            switch(sev) {
+                case 'critical': return 'bg-red-600 text-white';
+                case 'high': return 'bg-red-500 text-white';
+                case 'medium': return 'bg-yellow-500 text-white';
+                case 'low': return 'bg-green-500 text-white';
+                default: return 'bg-gray-500 text-white';
+            }
+        },
+        
+        assessImpactLevel(cvssScore) {
+            if (!cvssScore) return 'Assessment Required';
+            if (cvssScore >= 9.0) return 'Critical Business Impact';
+            if (cvssScore >= 7.0) return 'High Business Impact';
+            if (cvssScore >= 4.0) return 'Medium Business Impact';
+            return 'Low Business Impact';
+        },
+        
+        formatTechnicalDetails(details) {
+            if (!details) return '';
+            
+            let formatted = details
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded text-xs">$1</code>')
+                .replace(/\n\n/g, '</p><p class="mt-3">')
+                .replace(/\n-\s/g, '<br>• ')
+                .replace(/\n/g, '<br>');
+            
+            return `<p class="leading-relaxed">${formatted}</p>`;
+        },
+        
+        formatLinkName(name) {
+            const nameMap = {
+                'nvd': 'NVD Database',
+                'mitre': 'MITRE Corporation',
+                'exploit-db': 'Exploit Database',
+                'cve': 'CVE Details'
+            };
+            return nameMap[name.toLowerCase()] || name.toUpperCase();
         },
         
         // PoC Search Methods
@@ -133,7 +190,7 @@ createApp({
         
         async searchPoCs() {
             if (!this.selectedCves.length) {
-                alert('Please select at least one CVE');
+                alert('Please select at least one CVE for exploit analysis');
                 return;
             }
             
@@ -144,16 +201,15 @@ createApp({
                     limit: 4
                 });
                 this.pocResults = response.data;
-                console.log('🔍 PoC search results:', this.pocResults);
+                console.log('Exploit search results:', this.pocResults);
                 
-                // Show notification for Zerologon auto-preparation
                 const zerologonResult = this.pocResults.find(r => r.cve_id === 'CVE-2020-1472');
                 if (zerologonResult && zerologonResult.available_pocs.some(p => p.source === 'BreachPilot Built-in')) {
-                    console.log('🎯 Zerologon PoC auto-prepared and ready!');
+                    console.log('Zerologon exploit prepared and ready for execution');
                 }
             } catch (error) {
-                console.error('Error searching PoCs:', error);
-                alert('Failed to search PoCs: ' + (error.response?.data?.detail || error.message));
+                console.error('Error searching exploits:', error);
+                alert('Failed to search exploits: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.pocSearching = false;
             }
@@ -170,23 +226,21 @@ createApp({
                     target_ip: this.targetIp
                 });
                 
-                // Store the result
                 this.exploitResults.push({
                     ...response.data,
                     cve_id: cveId,
                     poc_index: pocIndex
                 });
                 
-                console.log('🎯 PoC execution result:', response.data);
+                console.log('Exploit execution result:', response.data);
                 
-                // Special logging for Zerologon
                 if (cveId === 'CVE-2020-1472') {
-                    console.log('🏰 Zerologon execution completed!', response.data.success ? 'VULNERABLE!' : 'Not vulnerable');
+                    console.log('Zerologon execution completed:', response.data.success ? 'VULNERABLE!' : 'Not vulnerable');
                 }
                 
             } catch (error) {
-                console.error('Error executing PoC:', error);
-                alert('Failed to execute PoC: ' + (error.response?.data?.detail || error.message));
+                console.error('Error executing exploit:', error);
+                alert('Failed to execute exploit: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.executingPocs[key] = false;
             }
@@ -199,6 +253,36 @@ createApp({
         
         getExploitResult(cveId, pocIndex) {
             return this.exploitResults.find(r => r.cve_id === cveId && r.poc_index === pocIndex);
+        },
+        
+        // Report Generation Methods
+        async generateReport() {
+            this.reportGenerating = true;
+            try {
+                const response = await axios.post(`/api/scan/${this.sessionId}/report`);
+                this.reportResult = response.data;
+                console.log('Security assessment report generated:', this.reportResult);
+            } catch (error) {
+                console.error('Error generating report:', error);
+                alert('Failed to generate report: ' + (error.response?.data?.detail || error.message));
+            } finally {
+                this.reportGenerating = false;
+            }
+        },
+        
+        async viewReport() {
+            if (this.reportResult?.report_url) {
+                window.open(this.reportResult.report_url, '_blank');
+            }
+        },
+        
+        async downloadReport() {
+            if (this.reportResult?.pdf_url) {
+                const link = document.createElement('a');
+                link.href = this.reportResult.pdf_url;
+                link.download = `security_assessment_${this.targetIp}_${new Date().toISOString().split('T')[0]}.pdf`;
+                link.click();
+            }
         },
         
         // UI Toggle Methods
@@ -236,15 +320,6 @@ createApp({
             return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
         },
         
-        getLinkIcon(linkName) {
-            const name = linkName.toLowerCase();
-            if (name.includes('nvd')) return '🛡️';
-            if (name.includes('mitre')) return '⚡';
-            if (name.includes('exploit')) return '💥';
-            if (name.includes('cve')) return '🔍';
-            return '🔗';
-        },
-        
         // Utility Methods
         getCvssClass(score) {
             if (!score) return 'cvss-info';
@@ -272,21 +347,6 @@ createApp({
             }
         },
         
-        formatCveExplanation(explanation) {
-            if (!explanation) return '';
-            
-            // Convert markdown-like formatting to HTML
-            let formatted = explanation
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded text-xs">$1</code>')
-                .replace(/\n\n/g, '</p><p class="mt-3">')
-                .replace(/\n-\s/g, '<br>• ')
-                .replace(/\n/g, '<br>');
-            
-            return `<p class="leading-relaxed">${formatted}</p>`;
-        },
-        
         formatTimestamp(timestamp) {
             if (!timestamp) return '';
             return new Date(timestamp * 1000).toLocaleString();
@@ -299,11 +359,12 @@ createApp({
                     scan_info: {
                         target_ip: this.targetIp,
                         session_id: this.sessionId,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
+                        assessment_type: 'Professional Security Assessment'
                     },
-                    nmap_result: this.nmapResult,
-                    analyst_result: this.analystResult,
-                    poc_results: this.pocResults,
+                    network_scan: this.nmapResult,
+                    vulnerability_analysis: this.analystResult,
+                    exploit_analysis: this.pocResults,
                     exploit_results: this.exploitResults
                 };
                 
@@ -311,7 +372,7 @@ createApp({
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `breachpilot_results_${this.targetIp}_${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `security_assessment_raw_${this.targetIp}_${new Date().toISOString().split('T')[0]}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -341,10 +402,14 @@ createApp({
             this.executingPocs = {};
             this.visiblePocCode = {};
             this.visibleExploitOutput = {};
+            
+            // Reset report data
+            this.reportGenerating = false;
+            this.reportResult = null;
         }
     },
     
     mounted() {
-        console.log('🛡️ BreachPilot frontend loaded - step-by-step execution mode');
+        console.log('BreachPilot Professional Security Assessment Framework loaded');
     }
 }).mount('#app');
