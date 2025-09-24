@@ -43,8 +43,8 @@ async def run_nmap(session_id: str):
         # Log detailed nmap results
         logger.info(f"Nmap completed for session: {session_id}")
         logger.info(f"  - Status: {result.status}")
-        logger.info(f"  - Open ports found: {len(result.open_ports)}")
-        logger.info(f"  - Services found: {len(result.services)}")
+        logger.info(f"  - Open ports found: {len(result.open_ports) if result.open_ports else 0}")
+        logger.info(f"  - Services found: {len(result.services) if result.services else 0}")
         logger.info(f"  - Raw output length: {len(result.raw_output) if result.raw_output else 0}")
         
         if result.open_ports:
@@ -220,7 +220,7 @@ async def get_results(session_id: str):
         
         # Log what we're returning
         if session.nmap_result:
-            logger.debug(f"Results endpoint returning nmap data with {len(session.nmap_result.open_ports)} ports")
+            logger.debug(f"Results endpoint returning nmap data with {len(session.nmap_result.open_ports) if session.nmap_result.open_ports else 0} ports")
         
         if session.poc_results:
             total_pocs = sum(len(pr.available_pocs) for pr in session.poc_results)
