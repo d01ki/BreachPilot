@@ -6,13 +6,11 @@ createApp({
             targetIp: '',
             sessionId: null,
             currentStep: null,
-            osintResult: null,
             nmapResult: null,
             analystResult: null,
             debugMode: false,
             showRawOutput: false,
             expandedCves: {},
-            autoScanActive: false,
             
             // PoC Search functionality
             selectedCves: [],
@@ -26,7 +24,6 @@ createApp({
     },
     
     computed: {
-        osintComplete() { return !!this.osintResult; },
         nmapComplete() { return !!this.nmapResult; },
         analysisComplete() { return !!this.analystResult; }
     },
@@ -35,62 +32,15 @@ createApp({
         async startScan() {
             if (!this.targetIp) return;
             
-            this.autoScanActive = true;
             try {
                 const response = await axios.post('/api/scan/start', {
                     target_ip: this.targetIp
                 });
                 this.sessionId = response.data.session_id;
-                console.log('🚀 Auto-scan started:', this.sessionId);
-                
-                // Start polling for auto-scan results
-                this.pollResults();
+                console.log('🚀 Scan session started:', this.sessionId);
             } catch (error) {
                 console.error('Error starting scan:', error);
                 alert('Failed to start scan');
-                this.autoScanActive = false;
-            }
-        },
-        
-        async pollResults() {
-            if (!this.sessionId) return;
-            
-            try {
-                const response = await axios.get(`/api/scan/${this.sessionId}/results`);
-                const data = response.data;
-                
-                // Update results as they become available
-                if (data.osint_result && !this.osintResult) {
-                    this.osintResult = data.osint_result;
-                    console.log('✅ OSINT completed automatically');
-                }
-                
-                if (data.nmap_result && !this.nmapResult) {
-                    this.nmapResult = data.nmap_result;
-                    console.log('✅ Nmap completed automatically');
-                }
-                
-                // Update current step based on session status
-                if (data.current_step) {
-                    this.currentStep = data.current_step;
-                }
-                
-                // Stop auto-scan when both OSINT and Nmap are complete
-                if (this.osintResult && this.nmapResult) {
-                    this.autoScanActive = false;
-                    this.currentStep = 'analysis';
-                    console.log('🎉 Auto-scan completed! Ready for CVE analysis.');
-                    return;
-                }
-                
-                // Continue polling if auto-scan is still active
-                if (this.autoScanActive) {
-                    setTimeout(() => this.pollResults(), 2000);
-                }
-                
-            } catch (error) {
-                console.error('Error polling results:', error);
-                this.autoScanActive = false;
             }
         },
         
@@ -99,24 +49,21 @@ createApp({
             try {
                 let response;
                 switch(step) {
-                    case 'osint':
-                        response = await axios.post(`/api/scan/${this.sessionId}/osint`);
-                        this.osintResult = response.data;
-                        break;
                     case 'nmap':
                         response = await axios.post(`/api/scan/${this.sessionId}/nmap`);
                         this.nmapResult = response.data;
-                        console.log('Nmap result received:', this.nmapResult);
+                        console.log('✅ Nmap scan completed:', this.nmapResult);
                         break;
                     case 'analyze':
                         response = await axios.post(`/api/scan/${this.sessionId}/analyze`);
                         this.analystResult = response.data;
+                        console.log('✅ CVE analysis completed:', this.analystResult);
                         break;
                 }
                 this.currentStep = null;
             } catch (error) {
                 console.error(`Error running ${step}:`, error);
-                alert(`Failed to run ${step}`);
+                alert(`Failed to run ${step}: ${error.response?.data?.detail || error.message}`);
                 this.currentStep = null;
             }
         },
@@ -206,7 +153,7 @@ createApp({
                 }
             } catch (error) {
                 console.error('Error searching PoCs:', error);
-                alert('Failed to search PoCs');
+                alert('Failed to search PoCs: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.pocSearching = false;
             }
@@ -239,7 +186,7 @@ createApp({
                 
             } catch (error) {
                 console.error('Error executing PoC:', error);
-                alert('Failed to execute PoC');
+                alert('Failed to execute PoC: ' + (error.response?.data?.detail || error.message));
             } finally {
                 this.executingPocs[key] = false;
             }
@@ -354,7 +301,6 @@ createApp({
                         session_id: this.sessionId,
                         timestamp: new Date().toISOString()
                     },
-                    osint_result: this.osintResult,
                     nmap_result: this.nmapResult,
                     analyst_result: this.analystResult,
                     poc_results: this.pocResults,
@@ -381,13 +327,11 @@ createApp({
             this.targetIp = '';
             this.sessionId = null;
             this.currentStep = null;
-            this.osintResult = null;
             this.nmapResult = null;
             this.analystResult = null;
             this.debugMode = false;
             this.showRawOutput = false;
             this.expandedCves = {};
-            this.autoScanActive = false;
             
             // Reset PoC data
             this.selectedCves = [];
@@ -401,6 +345,6 @@ createApp({
     },
     
     mounted() {
-        console.log('🛡️ BreachPilot frontend loaded with enhanced features');
+        console.log('🛡️ BreachPilot frontend loaded - step-by-step execution mode');
     }
 }).mount('#app');
