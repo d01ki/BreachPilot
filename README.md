@@ -1,370 +1,228 @@
-## 🆕 Latest Updates
+# BreachPilot
 
-### BlackHat-Ready Features (Current Version)
+BreachPilotは、自動ペネトレーションテストシステムです。指定されたターゲットに対してNmapスキャン、CVE分析、PoC検索、および脆弱性検証を実行します。
 
-✅ **Auto-Scan Functionality**
-- OSINT and Nmap now run automatically when starting a scan
-- No need to manually click "Run" buttons
-- Real-time progress indicators with "AUTO" badges
+## 機能
 
-✅ **Enhanced Zerologon Support**
-- CVE-2020-1472 automatically gets built-in PoC prepared
-- Ready-to-execute Zerologon exploit with proper DC detection
-- Special highlighting for built-in PoCs
+- **Nmapスキャン**: ターゲットのポートスキャンとサービス検出
+- **CVE分析**: 発見されたサービスの脆弱性分析
+- **PoC検索**: 特定されたCVEに対するProof-of-Conceptの検索
+- **脆弱性検証**: PoC実行による脆弱性の実際の検証
 
-✅ **Improved Service Information Display**
-- Enhanced Scan Summary with Service Info extraction
-- Better OS detection and Domain Controller identification
-- Service Info shows Host, OS, and CPE information from Nmap
+## セットアップ
 
-✅ **Enhanced CVE Analysis UI**
-- Larger, more prominent CVSS scores with color gradients
-- Improved CVE descriptions with better formatting
-- Enhanced reference links with icons (NVD, MITRE, ExploitDB)
-- Expandable detailed analysis sections
+### 要件
 
-✅ **CFFI Dependency Fix**
-- Automatic environment checking and fixing
-- Built-in dependency conflict resolution
-- Fixed version mismatch issues for impacket/cryptodome
+- Python 3.8+
+- Nmap
+- Git
 
-### Quick Start (BlackHat Ready)
+### インストール
 
+1. リポジトリをクローン:
 ```bash
-# 1. Clone and setup
 git clone https://github.com/d01ki/BreachPilot.git
 cd BreachPilot
+```
 
-# 2. Fix dependencies automatically
-chmod +x fix_dependencies.sh
-python3 -m venv venv && source venv/bin/activate
-./fix_dependencies.sh
+2. セットアップスクリプトを実行:
+```bash
+chmod +x setup.sh
+./setup.sh
+```
 
-# 3. Configure
-cp .env.example .env
-# Add your OpenAI API key to .env
+3. または手動でセットアップ:
+```bash
+pip install -r requirements.txt
+```
 
-# 4. Run
+### 必要なツールのインストール
+
+```bash
+chmod +x install_tools.sh
+./install_tools.sh
+```
+
+## 使用方法
+
+### Webインターフェース
+
+1. サーバーを起動:
+```bash
 python app.py
 ```
 
-### Usage Workflow
+2. ブラウザで `http://localhost:8000/ui` にアクセス
 
-1. **🚀 Enter target IP and click "Start Auto Scan"**
-   - OSINT and Nmap run automatically
-   - Real-time progress with AUTO indicators
+3. ターゲットIPを入力して「Start Scan」をクリック
 
-2. **📊 Review enhanced scan results**
-   - Detailed Service Info display
-   - Domain Controller detection
-   - Enhanced port risk assessment
+4. 各ステップを順番に実行:
+   - **Nmapスキャン**: ポートスキャンとサービス検出
+   - **CVE分析**: 脆弱性の特定と分析
+   - **PoC検索**: 選択したCVEのPoC検索
+   - **脆弱性検証**: PoCの実行と検証
 
-3. **🔍 Run CVE Analysis**
-   - AI-powered vulnerability identification
-   - Large CVSS scores with severity colors
-   - Detailed explanations and references
+### API
 
-4. **🎯 Search & Execute PoCs**
-   - Select CVEs for PoC search
-   - Zerologon automatically prepared for DC targets
-   - One-click execution with built-in exploits
+詳細なAPIドキュメントは `http://localhost:8000/docs` で確認できます。
 
-### Key Improvements for BlackHat Presentation
+#### 基本的なAPI使用例:
 
-- **Professional UI**: Clean, modern interface with gradients and animations
-- **Auto-Execution**: Demonstrates autonomous scanning capabilities
-- **Built-in Exploits**: Shows sophisticated exploit integration (Zerologon)
-- **Real-time Feedback**: Live status updates and progress indicators
-- **Research-Grade Output**: Detailed CVE analysis with references and CVSS scoring
-
----
-
-# 🛡️ BreachPilot
-
-> **AI-Powered Autonomous Penetration Testing Framework**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
-[![CrewAI](https://img.shields.io/badge/CrewAI-0.80+-purple.svg)](https://www.crewai.io/)
-
-BreachPilot is a next-generation automated penetration testing framework that leverages **AI agents** and **advanced vulnerability analysis** to conduct comprehensive security assessments. Built with CrewAI and powered by Large Language Models, it automates the entire penetration testing workflow from reconnaissance to exploitation.
-
-## ✨ Key Features
-
-### 🤖 **AI-Driven Intelligence**
-- **Multi-Agent Architecture**: Specialized AI agents for OSINT, analysis, and exploitation
-- **Adaptive Exploit Generation**: LLM-powered exploit code adaptation for specific targets
-- **Explainable AI (XAI)**: Clear reasoning for every identified vulnerability
-- **Smart CVE Analysis**: Automatic CVSS scoring via NVD API integration
-
-### 🔍 **Comprehensive Scanning**
-- **OSINT Collection**: IP geolocation, organization details, DNS enumeration
-- **Network Discovery**: High-speed Nmap integration with service fingerprinting
-- **Vulnerability Detection**: Automated CVE identification from scan results
-- **Domain Controller Detection**: Specialized detection for Active Directory environments
-
-### 💥 **Advanced Exploitation**
-- **Multi-Source PoC Search**: GitHub, ExploitDB, PacketStorm integration
-- **Built-in Exploits**: Ready-to-execute exploits like Zerologon (CVE-2020-1472)
-- **Intelligent Code Analysis**: AI examines and adapts exploit code
-- **Safe Execution**: Sandboxed exploit execution with timeout protection
-- **Real-time Feedback**: Live status updates and execution results
-
-### 📊 **Modern Web Interface**
-- **Auto-Scan Capability**: Automatic OSINT and Nmap execution
-- **Responsive Dashboard**: Real-time progress tracking with WebSocket updates
-- **Interactive CVE Selection**: Choose specific vulnerabilities to exploit
-- **Enhanced CVSS Display**: Large, color-coded severity visualization
-- **Inline Results Display**: View outputs directly under each step
-
-## 🏗️ Architecture
-
-```mermaid
-graph TD
-    A[Target IP] --> B[Auto OSINT Scanner]
-    B --> C[Auto Nmap Scanner]
-    C --> D[AI Analyst Crew]
-    D --> E[PoC Search Agent]
-    E --> F[Built-in Exploit Preparation]
-    F --> G[User Approval]
-    G --> H[AI Exploit Crew]
-    H --> I[Verification]
-    I --> J[Report Generator]
+1. スキャンセッション開始:
+```bash
+curl -X POST "http://localhost:8000/api/scan/start" \
+  -H "Content-Type: application/json" \
+  -d '{"target_ip": "192.168.1.100"}'
 ```
 
-### Core Components
+2. Nmapスキャン実行:
+```bash
+curl -X POST "http://localhost:8000/api/scan/{session_id}/nmap"
+```
 
-- **🎯 Orchestrator**: Manages workflow with auto-scan capabilities
-- **🔬 Scanner Modules**: Auto-executing OSINT and Nmap engines
-- **🧠 AI Agents**: 
-  - **Analyst Crew**: CVE identification and risk assessment
-  - **PoC Crew**: Exploit code discovery and retrieval
-  - **Exploit Crew**: Code adaptation and execution
-- **💥 Built-in Exploits**: Ready-to-execute exploits (Zerologon, etc.)
-- **📡 API Server**: FastAPI-based REST and WebSocket endpoints
-- **🎨 Frontend**: Vue.js reactive interface with enhanced UI
+3. CVE分析実行:
+```bash
+curl -X POST "http://localhost:8000/api/scan/{session_id}/analyze"
+```
 
-## 🚀 Quick Start
+## 設定
 
-### Prerequisites
+### 環境変数
+
+`.env`ファイルを作成して設定をカスタマイズできます:
 
 ```bash
-# Python 3.8 or higher
-python --version
+# データディレクトリ
+DATA_DIR=./data
 
-# Nmap installed
-nmap --version
+# レポート出力ディレクトリ  
+REPORTS_DIR=./reports
+
+# ログレベル
+LOG_LEVEL=INFO
 ```
 
-### Installation
+## ディレクトリ構造
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/BreachPilot.git
-cd BreachPilot
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies (with automatic fix)
-chmod +x fix_dependencies.sh
-./fix_dependencies.sh
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env and add your OpenAI API key
+```
+BreachPilot/
+├── app.py                 # メインアプリケーション
+├── backend/               # バックエンドコード
+│   ├── main.py           # FastAPI アプリケーション
+│   ├── models.py         # データモデル
+│   ├── orchestrator.py   # スキャンオーケストレーター
+│   ├── agents/           # AI エージェント
+│   ├── scanners/         # スキャナー (Nmap)
+│   └── exploiter/        # エクスプロイト実行器
+├── frontend/             # フロントエンドファイル
+│   ├── index.html        # メインUI
+│   └── static/           # 静的ファイル
+└── data/                 # スキャンデータ保存
 ```
 
-### 🔧 Troubleshooting Installation
+## 特徴
 
-If you encounter a **CFFI version mismatch error** during execution, run the automatic fix:
+### 高度なNmapスキャン
+- ポートスキャン
+- サービス検出
+- OS検出
+- ドメインコントローラー識別
 
-```bash
-# Make the fix script executable
-chmod +x fix_dependencies.sh
+### インテリジェントCVE分析
+- サービス情報に基づく脆弱性特定
+- CVSS スコア評価
+- 詳細な脆弱性説明
 
-# Run the fix (ensure virtual environment is activated)
-source venv/bin/activate
-./fix_dependencies.sh
-```
+### 自動PoC検索
+- GitHub からの PoC 検索
+- 組み込みエクスプロイト (Zerologon等)
+- コード品質評価
 
-For other installation issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+### 脆弱性検証
+- PoC の自動実行
+- 結果の詳細分析
+- 成功/失敗の判定
 
-### Configuration
+## セキュリティ注意事項
 
-Create a `.env` file:
+⚠️ **重要**: このツールは教育目的および承認されたペネトレーションテストでのみ使用してください。
 
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-SHODAN_API_KEY=your_shodan_key_optional
-GITHUB_TOKEN=your_github_token_optional
-```
+- 適切な許可なしに他人のシステムをスキャンすることは違法です
+- テスト環境または自分が所有するシステムでのみ使用してください
+- 発見された脆弱性は責任を持って開示してください
 
-### Running
+## トラブルシューティング
 
-```bash
-# Start the application
-python app.py
+### よくある問題
 
-# Access the web interface
-# Open http://localhost:8000/ui in your browser
-```
-
-## 📖 Usage Guide
-
-### Enhanced Step-by-Step Workflow
-
-1. **🎯 Target Input & Auto-Scan**
-   ```
-   Enter target IP address (e.g., 192.168.1.100)
-   Click "Start Auto Scan" - OSINT and Nmap run automatically!
+1. **Nmapが見つからない**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install nmap
+   
+   # CentOS/RHEL
+   sudo yum install nmap
+   
+   # macOS
+   brew install nmap
    ```
 
-2. **🔍 Automatic Intelligence Gathering**
-   - OSINT collects organization, location, and contact details
-   - Nmap performs comprehensive port and service discovery
-   - Service information automatically extracted and displayed
+2. **権限エラー**:
+   ```bash
+   # Nmapをrootで実行する場合
+   sudo python app.py
+   ```
 
-3. **🌐 Enhanced Scan Results**
-   - Professional Service Info display with Host, OS, and CPE details
-   - Automatic Domain Controller detection for AD environments
-   - Color-coded port risk assessment
+3. **ポートが使用中**:
+   ```bash
+   # 別のポートを使用
+   uvicorn backend.main:app --host 0.0.0.0 --port 8001
+   ```
 
-4. **🔐 AI-Powered CVE Analysis**
-   - Enhanced CVSS scores with large, color-gradient displays
-   - Detailed vulnerability descriptions with expandable analysis
-   - Direct links to NVD, MITRE, and ExploitDB with icons
+## 開発
 
-5. **🎯 Intelligent PoC Selection**
-   - Select CVEs for automated PoC search
-   - **Zerologon auto-preparation** for Domain Controller targets
-   - Built-in exploits marked with special indicators
-
-6. **⚡ One-Click Exploitation**
-   - Execute built-in exploits like Zerologon with single click
-   - Real-time execution feedback with success/failure indicators
-   - Detailed output analysis and vulnerability confirmation
-
-### API Examples
-
-```python
-import requests
-
-# Start auto-scan (OSINT + Nmap automatic)
-response = requests.post(
-    'http://localhost:8000/api/scan/start',
-    json={'target_ip': '192.168.1.100'}
-)
-session_id = response.json()['session_id']
-
-# Check auto-scan progress
-results = requests.get(f'http://localhost:8000/api/scan/{session_id}/results')
-
-# Run CVE analysis when ready
-requests.post(f'http://localhost:8000/api/scan/{session_id}/analyze')
-```
-
-## 🛠️ Technology Stack
-
-### Backend
-- **FastAPI**: High-performance async web framework with auto-scan orchestration
-- **CrewAI**: Multi-agent AI orchestration with enhanced workflows
-- **LangChain**: LLM integration and chains for intelligent analysis
-- **OpenAI GPT**: Language model for analysis and adaptation
-- **Python-Nmap**: Network scanning with enhanced parsing
-- **Built-in Exploits**: Custom exploit implementations (Zerologon, etc.)
-
-### Frontend
-- **Vue.js 3**: Progressive JavaScript framework with enhanced UI
-- **TailwindCSS**: Utility-first CSS with custom gradients and animations
-- **Real-time Updates**: Auto-polling for scan progress
-- **Enhanced UX**: Professional interface suitable for research presentations
-
-### Security Tools Integration
-- **Nmap**: Network discovery with automatic execution
-- **NVD API**: CVE and CVSS data with enhanced display
-- **GitHub API**: PoC code repository integration
-- **ExploitDB**: Exploit database with direct links
-- **Built-in Exploits**: Custom implementations for critical vulnerabilities
-
-## 🔒 Security & Ethics
-
-### ⚠️ Important Disclaimers
-
-> **This tool is for AUTHORIZED security testing only!**
-
-- ✅ **DO**: Use on systems you own or have explicit permission to test
-- ✅ **DO**: Follow responsible disclosure practices
-- ✅ **DO**: Respect all applicable laws and regulations
-- ❌ **DON'T**: Use for unauthorized access or malicious purposes
-- ❌ **DON'T**: Target systems without written authorization
-
-### Safety Features
-
-- **User Approval Required**: Manual confirmation before exploitation
-- **Sandboxed Execution**: Exploits run in isolated environment
-- **Timeout Protection**: Automatic termination of long-running exploits
-- **Audit Logging**: Complete activity logs for compliance
-- **Environment Verification**: Automatic dependency checking and fixing
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md).
-
-### Development Setup
+### 開発環境のセットアップ
 
 ```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
+# 開発用依存関係のインストール
+pip install -r requirements.txt
 
-# Run tests
-pytest tests/
+# テストの実行
+python -m pytest
 
-# Code formatting
+# コードフォーマット
 black backend/ frontend/
-flake8 backend/
 ```
 
-## 📝 License
+### 貢献
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+1. このリポジトリをフォーク
+2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. プルリクエストを作成
 
-## 🙏 Acknowledgments
+## 変更履歴
 
-- **CrewAI Team**: For the amazing multi-agent framework
-- **OpenAI**: For GPT models powering the intelligence
-- **Nmap Project**: For the legendary network scanner
-- **Security Researchers**: For maintaining exploit databases
+### v2.0 (現在)
+- OSINT機能の削除
+- ステップ別実行の改善
+- リアルタイム結果表示
+- UI/UXの向上
 
-## 📧 Contact
+### v1.x
+- 初期リリース
+- 基本的なスキャン機能
 
-- **Author**: Your Name
-- **Email**: your.email@example.com
-- **Twitter**: [@yourusername](https://twitter.com/yourusername)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/BreachPilot/issues)
+## ライセンス
 
-## 🗺️ Roadmap
+このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](LICENSE)ファイルを参照してください。
 
-- [x] **Auto-scan functionality** ✅
-- [x] **Built-in Zerologon exploit** ✅
-- [x] **Enhanced CVE display** ✅
-- [x] **CFFI dependency fixes** ✅
-- [ ] **Additional built-in exploits**
-- [ ] **Metasploit integration**
-- [ ] **Team collaboration features**
-- [ ] **Cloud deployment support**
-- [ ] **Advanced report customization**
+## サポート
+
+- **Issues**: [GitHub Issues](https://github.com/d01ki/BreachPilot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/d01ki/BreachPilot/discussions)
 
 ---
 
-<div align="center">
-
-**⭐ Star this repo if you find it useful! ⭐**
-
-*Made with ❤️ by security enthusiasts, for security enthusiasts*
-
-*BlackHat Ready - Professional Penetration Testing Framework*
-
-</div>
+**免責事項**: このツールは教育目的でのみ提供されています。使用者は適用される法律と規制を遵守する責任があります。
