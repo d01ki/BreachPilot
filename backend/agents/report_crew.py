@@ -1,18 +1,174 @@
+from typing import Dict, Any, List
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+class ReportGeneratorCrew:
+    """CrewAI-based report generation system for professional security assessments"""
+    
+    def __init__(self):
+        try:
+            from crewai import Agent, Task, Crew, Process
+            self.security_analyst = self._create_security_analyst()
+            self.technical_writer = self._create_technical_writer()
+            self.executive_advisor = self._create_executive_advisor()
+            self.crew_available = True
+        except ImportError as e:
+            logger.warning(f"CrewAI not available, using fallback: {e}")
+            self.crew_available = False
+    
+    def _create_security_analyst(self):
+        """Create a security analyst agent for technical assessment"""
+        from crewai import Agent
+        return Agent(
+            role='Senior Security Analyst',
+            goal='Analyze security assessment results and provide detailed technical findings',
+            backstory="""You are a senior cybersecurity professional with 10+ years of experience 
+            in penetration testing, vulnerability assessment, and security consulting. You specialize 
+            in analyzing network security postures, identifying critical vulnerabilities, and 
+            providing actionable security recommendations.""",
+            verbose=True,
+            allow_delegation=False
+        )
+    
+    def _create_technical_writer(self):
+        """Create a technical writer agent for documentation"""
+        from crewai import Agent
+        return Agent(
+            role='Technical Security Writer',
+            goal='Create comprehensive and professional security assessment documentation',
+            backstory="""You are an expert technical writer specializing in cybersecurity 
+            documentation. You transform complex technical security findings into clear, 
+            actionable reports for both technical teams and management. Your reports are 
+            known for their clarity, completeness, and professional presentation.""",
+            verbose=True,
+            allow_delegation=False
+        )
+    
+    def _create_executive_advisor(self):
+        """Create an executive advisor for business impact analysis"""
+        from crewai import Agent
+        return Agent(
+            role='Executive Security Advisor',
+            goal='Provide executive-level security insights and business impact analysis',
+            backstory="""You are a C-level security executive with extensive experience 
+            in enterprise security strategy. You translate technical vulnerabilities into 
+            business risks, provide strategic recommendations, and communicate security 
+            concerns in terms that executive leadership can understand and act upon.""",
+            verbose=True,
+            allow_delegation=False
+        )
+    
+    def generate_comprehensive_report(
+        self, 
+        target_ip: str,
+        nmap_result=None,
+        analyst_result=None,
+        exploit_results=None
+    ) -> Dict[str, Any]:
+        """Generate a comprehensive security assessment report using CrewAI"""
+        
+        logger.info(f"Starting report generation for target: {target_ip}")
+        
+        if not self.crew_available:
+            return self._generate_basic_report(target_ip, nmap_result, analyst_result, exploit_results)
+        
+        # Prepare assessment data
+        assessment_data = self._prepare_assessment_data(
+            target_ip, nmap_result, analyst_result, exploit_results
+        )
+        
+        try:
+            # Create tasks for each agent
+            tasks = self._create_report_tasks(assessment_data)
+            
+            # Create crew and execute
+            from crewai import Crew, Process
+            crew = Crew(
+                agents=[self.security_analyst, self.technical_writer, self.executive_advisor],
+                tasks=tasks,
+                process=Process.sequential,
+                verbose=True
+            )
+            
+            # Execute the crew
+            result = crew.kickoff()
+            
+            # Process results
+            report_data = self._process_crew_results(result, assessment_data)
+            
+            logger.info("CrewAI report generation completed successfully")
+            return report_data
+            
+        except Exception as e:
+            logger.error(f"CrewAI report generation failed: {e}")
+            # Fallback to basic report
+            return self._generate_basic_report(target_ip, nmap_result, analyst_result, exploit_results)
+    
+    def _prepare_assessment_data(
+        self, 
+        target_ip: str,
+        nmap_result=None,
+        analyst_result=None,
+        exploit_results=None
+    ) -> Dict[str, Any]:
+        """Prepare assessment data for CrewAI processing"""
+        
+        # Network Services Summary
+        services_summary = "No network services discovered"
+        if nmap_result and hasattr(nmap_result, 'services') and nmap_result.services:
+            services = []
+            for service in nmap_result.services:
+                service_info = f"Port {service.get('port')}: {service.get('name', 'unknown')}"
+                if service.get('product'):
+                    service_info += f" ({service['product']})"
+                if service.get('version'):
+                    service_info += f" version {service['version']}"
+                services.append(service_info)
+            services_summary = f"{len(services)} network services discovered:\n" + "\n".join(services)
+        
+        # Vulnerability Summary
+        vulnerabilities_summary = "No vulnerabilities identified"
+        critical_cves = []
+        if analyst_result and hasattr(analyst_result, 'identified_cves') and analyst_result.identified_cves:
+            cves_by_severity = {'critical': [], 'high': [], 'medium': [], 'low': []}
+            
+            for cve in analyst_result.identified_cves[:5]:  # Limit to 5 CVEs as requested
+                severity = getattr(cve, 'severity', 'unknown').lower() if hasattr(cve, 'severity') else 'unknown'
+                cve_info = {
+                    'id': cve.cve_id,
+                    'severity': severity,
+                    'cvss_score': getattr(cve, 'cvss_score', None),
+                    'description': getattr(cve, 'description', ''),
+                    'affected_service': getattr(cve, 'affected_service', ''),
+                    'exploit_available': getattr(cve, 'exploit_available', False)
+                }
+                
+                if severity in cves_by_severity:
+                    cves_by_severity[severity].append(cve_info)
+                
+                if severity in ['critical', 'high']:
+                    critical_cves.append(cve_info)
+            
+            total_cves = len(analyst_result.identified_cves)
+            vulnerabilities_summary = f"{total_cves} vulnerabilities identified across severity levels"
+        
         # Exploitation Summary
         exploitation_summary = "No exploitation attempts performed"
         successful_exploits = []
         if exploit_results:
             total_attempts = len(exploit_results)
-            successful = [er for er in exploit_results if er.success]
+            successful = [er for er in exploit_results if getattr(er, 'success', False)]
             
             exploitation_summary = f"{total_attempts} exploitation attempts: {len(successful)} successful"
             
             for exploit in successful:
                 successful_exploits.append({
-                    'cve_id': exploit.cve_id,
-                    'target_ip': exploit.target_ip,
-                    'exploit_used': exploit.exploit_used,
-                    'success': exploit.success
+                    'cve_id': getattr(exploit, 'cve_id', ''),
+                    'target_ip': getattr(exploit, 'target_ip', ''),
+                    'exploit_used': getattr(exploit, 'exploit_used', ''),
+                    'success': getattr(exploit, 'success', False)
                 })
         
         return {
@@ -23,13 +179,14 @@
             'exploitation_summary': exploitation_summary,
             'critical_cves': critical_cves,
             'successful_exploits': successful_exploits,
-            'total_services': len(nmap_result.services) if nmap_result and nmap_result.services else 0,
-            'total_vulnerabilities': len(analyst_result.identified_cves) if analyst_result and analyst_result.identified_cves else 0,
+            'total_services': len(nmap_result.services) if nmap_result and hasattr(nmap_result, 'services') and nmap_result.services else 0,
+            'total_vulnerabilities': len(analyst_result.identified_cves) if analyst_result and hasattr(analyst_result, 'identified_cves') and analyst_result.identified_cves else 0,
             'total_exploits': len(successful_exploits)
         }
     
-    def _create_report_tasks(self, assessment_data: Dict[str, Any]) -> List[Task]:
+    def _create_report_tasks(self, assessment_data: Dict[str, Any]) -> List:
         """Create tasks for each CrewAI agent"""
+        from crewai import Task
         
         # Task 1: Technical Analysis
         technical_analysis_task = Task(
@@ -96,7 +253,7 @@
         
         return [technical_analysis_task, documentation_task, executive_summary_task]
     
-    def _process_crew_results(self, crew_result: Any, assessment_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_crew_results(self, crew_result, assessment_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process CrewAI results into structured report data"""
         
         report_data = {
@@ -118,9 +275,9 @@
     def _generate_basic_report(
         self, 
         target_ip: str, 
-        nmap_result: NmapResult = None, 
-        analyst_result: AnalystResult = None, 
-        exploit_results: List[ExploitResult] = None
+        nmap_result=None, 
+        analyst_result=None, 
+        exploit_results=None
     ) -> Dict[str, Any]:
         """Generate basic report as fallback when CrewAI fails"""
         
