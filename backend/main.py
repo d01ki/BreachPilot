@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from typing import List, Dict, Any
 import asyncio
@@ -16,18 +16,16 @@ from backend.config import config
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-logging.getLogger("uvicorn.access").addFilter(lambda r: "/results" not in r.getMessage())
 
 app = FastAPI(title="BreachPilot Professional API")
 
-# Enhanced CORS configuration
+# CORS configuration
 app.add_middleware(
     CORSMiddleware, 
     allow_origins=["*"], 
     allow_credentials=True, 
     allow_methods=["*"], 
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Type"]  # For file downloads
+    allow_headers=["*"]
 )
 
 # Ensure directories exist
@@ -35,19 +33,16 @@ reports_dir = config.REPORTS_DIR
 reports_dir.mkdir(exist_ok=True)
 config.DATA_DIR.mkdir(exist_ok=True)
 
-# Mount static files for reports with enhanced configuration
-try:
-    app.mount("/reports", StaticFiles(directory=str(reports_dir), html=True), name="reports")
-    logger.info(f"Static reports directory mounted at /reports -> {reports_dir}")
-except Exception as e:
-    logger.error(f"Failed to mount static reports directory: {e}")
+# Static files
+app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+
+# Serve frontend
+@app.get("/")
+async def serve_frontend():
+    return FileResponse("frontend/index.html")
 
 orchestrator = ScanOrchestrator()
 active_connections: Dict[str, WebSocket] = {}
-
-@app.get("/")
-async def root():
-    return {"message": "BreachPilot Professional API", "status": "online", "reports_dir": str(reports_dir)}
 
 @app.post("/api/scan/start")
 async def start_scan(request: ScanRequest):
@@ -63,41 +58,16 @@ async def start_scan(request: ScanRequest):
 @app.post("/api/scan/{session_id}/nmap")
 async def run_nmap(session_id: str):
     try:
-        logger.info(f"Running network service discovery for session: {session_id}")
         result = orchestrator.run_nmap(session_id)
-        
-        logger.info(f"Network discovery completed for session: {session_id}")
-        logger.info(f"  - Status: {result.status}")
-        logger.info(f"  - Open services found: {len(result.open_ports) if result.open_ports else 0}")
-        
-        if result.open_ports:
-            for port in result.open_ports:
-                logger.info(f"    Service {port['port']}: {port['service']} - {port.get('product', 'Unknown')} {port.get('version', '')}")
-        else:
-            logger.warning(f"No accessible services found for session: {session_id}")
-            
-        result_dict = result.model_dump()
-        return result_dict
-        
+        return result.model_dump()
     except Exception as e:
-        logger.error(f"Network discovery failed for session {session_id}: {e}", exc_info=True)
+        logger.error(f"Network discovery failed for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/scan/{session_id}/analyze")
 async def run_analysis(session_id: str):
     try:
-        logger.info(f"Running professional vulnerability assessment for session: {session_id}")
         result = orchestrator.run_analysis(session_id)
-        logger.info(f"Vulnerability assessment completed for session: {session_id}")
-        logger.info(f"  - CVEs identified: {len(result.identified_cves) if result.identified_cves else 0}")
-        
-        if result.identified_cves:
-            severity_count = {}
-            for cve in result.identified_cves:
-                severity = cve.severity or 'unknown'
-                severity_count[severity] = severity_count.get(severity, 0) + 1
-            logger.info(f"  - Severity distribution: {severity_count}")
-        
         return result.model_dump()
     except Exception as e:
         logger.error(f"Vulnerability assessment failed for session {session_id}: {e}")
@@ -108,14 +78,7 @@ async def search_pocs(session_id: str, payload: Dict[str, Any] = Body(...)):
     try:
         selected_cves = payload.get('selected_cves', [])
         limit = payload.get('limit', 4)
-        logger.info(f"Searching exploits for session {session_id}, CVEs: {selected_cves}, limit: {limit}")
-        
         results = orchestrator.search_pocs_for_cves(session_id, selected_cves, limit=limit)
-        
-        total_pocs = sum(len(r.available_pocs) for r in results)
-        total_with_code = sum(len([p for p in r.available_pocs if p.code]) for r in results)
-        logger.info(f"Exploit search completed: {total_pocs} total exploits, {total_with_code} with source code")
-        
         return [r.model_dump() for r in results]
     except Exception as e:
         logger.error(f"Exploit search failed for session {session_id}: {e}")
@@ -123,7 +86,6 @@ async def search_pocs(session_id: str, payload: Dict[str, Any] = Body(...)):
 
 @app.post("/api/scan/{session_id}/exploit/by_index")
 async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Body(...)):
-    """Execute a specific exploit by its index"""
     try:
         cve_id = payload.get('cve_id')
         poc_index = payload.get('poc_index')
@@ -132,11 +94,7 @@ async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Bo
         if not all([cve_id is not None, poc_index is not None, target_ip]):
             raise HTTPException(status_code=400, detail="Missing required parameters")
         
-        logger.info(f"Executing exploit #{poc_index} for CVE {cve_id} on target {target_ip}")
-        
         result = orchestrator.execute_poc_by_index(session_id, cve_id, poc_index, target_ip)
-        logger.info(f"Exploit #{poc_index} execution completed for CVE {cve_id}: {'SUCCESS' if result.success else 'FAILED'}")
-        
         return result.model_dump()
     except Exception as e:
         logger.error(f"Exploit execution failed for session {session_id}: {e}")
@@ -146,204 +104,191 @@ async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Bo
 async def generate_report(session_id: str):
     """Generate comprehensive security assessment report"""
     try:
-        logger.info(f"Generating professional security assessment report for session: {session_id}")
+        logger.info(f"Generating report for session: {session_id}")
         
+        # Get session to extract target IP
+        session = orchestrator._get_session(session_id)
+        target_ip = session.target_ip
+        
+        # Generate report using orchestrator
         result = orchestrator.generate_report(session_id)
         
-        logger.info(f"Security assessment report generated successfully for session: {session_id}")
-        logger.info(f"  - Report type: {result.get('report_type', 'Standard')}")
-        logger.info(f"  - Executive summary: {len(result.get('executive_summary', '')) > 0}")
-        logger.info(f"  - Technical findings: {result.get('findings_count', 0)}")
+        # Create a simple test PDF for immediate download
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Create HTML report
+        html_content = f"""<!DOCTYPE html>
+<html><head><title>Security Assessment Report - {target_ip}</title>
+<style>
+body {{font-family: Arial, sans-serif; margin: 40px; line-height: 1.6;}}
+h1 {{color: #333; border-bottom: 2px solid #007acc;}}
+.header {{background: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px;}}
+.section {{margin: 20px 0;}}
+.metric {{display: inline-block; background: #e8f4fd; padding: 10px; margin: 5px; border-radius: 5px;}}
+</style></head>
+<body>
+<div class="header">
+<h1>Security Assessment Report</h1>
+<p><strong>Target:</strong> {target_ip}</p>
+<p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+<p><strong>Report Type:</strong> Professional Security Assessment</p>
+</div>
+
+<div class="section">
+<h2>Executive Summary</h2>
+<p>This security assessment was conducted using BreachPilot Professional Framework.</p>
+
+<div class="metric">Services: {result.get('findings_count', 0)}</div>
+<div class="metric">Critical Issues: {result.get('critical_issues', 0)}</div>
+<div class="metric">Successful Exploits: {result.get('successful_exploits', 0)}</div>
+</div>
+
+<div class="section">
+<h2>Assessment Results</h2>
+<p>{result.get('executive_summary', 'Comprehensive security analysis completed.')}</p>
+</div>
+
+<div class="section">
+<h2>Recommendations</h2>
+<ul>
+<li>Apply security patches for identified vulnerabilities</li>
+<li>Implement network segmentation</li>
+<li>Enable advanced monitoring</li>
+<li>Conduct regular security assessments</li>
+</ul>
+</div>
+
+<footer style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #ccc; color: #666;">
+<p>Generated by BreachPilot Professional Security Assessment Framework</p>
+<p>Report ID: {session_id}</p>
+</footer>
+</body></html>"""
+        
+        html_path = reports_dir / f"security_report_{target_ip}_{timestamp}.html"
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        # Create simple PDF content
+        pdf_content = f"""SECURITY ASSESSMENT REPORT
+=============================
+
+Target: {target_ip}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Report Type: Professional Security Assessment
+Session ID: {session_id}
+
+EXECUTIVE SUMMARY
+================
+This security assessment was conducted using BreachPilot Professional Framework.
+
+KEY METRICS:
+- Findings: {result.get('findings_count', 0)}
+- Critical Issues: {result.get('critical_issues', 0)}  
+- Successful Exploits: {result.get('successful_exploits', 0)}
+
+ASSESSMENT RESULTS:
+{result.get('executive_summary', 'Comprehensive security analysis completed.')}
+
+RECOMMENDATIONS:
+1. Apply security patches for identified vulnerabilities
+2. Implement network segmentation  
+3. Enable advanced monitoring
+4. Conduct regular security assessments
+
+---
+Generated by BreachPilot Professional Security Assessment Framework
+Report ID: {session_id}
+"""
+        
+        pdf_path = reports_dir / f"security_report_{target_ip}_{timestamp}.pdf"
+        with open(pdf_path, 'w', encoding='utf-8') as f:
+            f.write(pdf_content)
+        
+        logger.info(f"Report files created: {html_path}, {pdf_path}")
+        
+        # Update result with file paths
+        result.update({
+            "html_path": str(html_path),
+            "pdf_path": str(pdf_path),
+            "html_download_url": f"/download/html/{target_ip}",
+            "pdf_download_url": f"/download/pdf/{target_ip}"
+        })
         
         return result
+        
     except Exception as e:
         logger.error(f"Report generation failed for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/reports/download/{report_type}/{target_ip}")
-async def download_report(report_type: str, target_ip: str):
-    """Download generated reports (HTML/PDF/JSON/MD)"""
+@app.get("/download/{file_type}/{target_ip}")
+async def download_file(file_type: str, target_ip: str):
+    """Simple file download endpoint"""
     try:
-        logger.info(f"Download request: {report_type} report for {target_ip}")
+        logger.info(f"Download request: {file_type} for {target_ip}")
         
-        if report_type not in ['html', 'pdf', 'json', 'md']:
-            raise HTTPException(status_code=400, detail="Invalid report type. Must be html, pdf, json, or md")
+        if file_type not in ['html', 'pdf']:
+            raise HTTPException(status_code=400, detail="File type must be html or pdf")
         
-        # Search for report files with multiple patterns
-        search_patterns = [
-            f"{reports_dir}/*{target_ip}*.{report_type}",
-            f"{reports_dir}/enterprise_assessment_{target_ip}_*.{report_type}",
-            f"{reports_dir}/professional_assessment_{target_ip}*.{report_type}",
-            f"{reports_dir}/{target_ip}_report.{report_type}",
-        ]
-        
-        if report_type == 'md':
-            search_patterns.append(f"{reports_dir}/executive_summary_{target_ip}_*.{report_type}")
-        
-        files = []
-        for pattern in search_patterns:
-            files.extend(glob.glob(pattern))
-        
-        # Remove duplicates and sort by modification time
-        files = list(set(files))
+        # Find the most recent file
+        pattern = f"security_report_{target_ip}_*.{file_type}"
+        files = list(reports_dir.glob(pattern))
         
         if not files:
-            logger.warning(f"No {report_type.upper()} report found for target {target_ip}")
-            logger.info(f"Searched patterns: {search_patterns}")
-            
-            # List all files in reports directory for debugging
-            all_files = list(reports_dir.glob("*"))
-            logger.info(f"Available files in reports directory: {[f.name for f in all_files]}")
-            
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No {report_type.upper()} report found for target {target_ip}. Please generate a report first."
-            )
+            logger.error(f"No {file_type} file found for {target_ip}")
+            logger.info(f"Available files: {list(reports_dir.glob('*'))}")
+            raise HTTPException(status_code=404, detail=f"No {file_type} report found for {target_ip}")
         
-        # Get the most recent file
-        latest_file = max(files, key=lambda f: os.path.getctime(f))
-        file_path = Path(latest_file)
+        # Get the newest file
+        latest_file = max(files, key=os.path.getctime)
         
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Report file not found")
+        logger.info(f"Serving file: {latest_file}")
         
-        # Determine content type and filename
-        content_types = {
-            'html': 'text/html',
-            'pdf': 'application/pdf',
-            'json': 'application/json',
-            'md': 'text/markdown'
-        }
+        media_type = "application/pdf" if file_type == "pdf" else "text/html"
+        filename = f"security_assessment_{target_ip}.{file_type}"
         
-        content_type = content_types.get(report_type, 'application/octet-stream')
-        filename = f"security_assessment_{target_ip}.{report_type}"
-        
-        logger.info(f"Serving {report_type.upper()} report: {file_path} ({file_path.stat().st_size} bytes)")
-        
-        # For PDF files, use StreamingResponse to handle large files better
-        if report_type == 'pdf':
-            def iterfile(file_path: Path):
-                with open(file_path, mode="rb") as file_like:
-                    yield from file_like
-            
-            return StreamingResponse(
-                iterfile(file_path),
-                media_type=content_type,
-                headers={
-                    "Content-Disposition": f"attachment; filename={filename}",
-                    "Content-Length": str(file_path.stat().st_size)
-                }
-            )
-        else:
-            return FileResponse(
-                path=str(file_path),
-                media_type=content_type,
-                filename=filename,
-                headers={"Content-Disposition": f"attachment; filename={filename}"}
-            )
+        return FileResponse(
+            path=str(latest_file),
+            media_type=media_type,
+            filename=filename
+        )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to download {report_type} report for {target_ip}: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.get("/api/reports/list/{target_ip}")
-async def list_reports(target_ip: str):
-    """List available reports for a target"""
-    try:
-        reports = []
-        patterns = [
-            f"{reports_dir}/*{target_ip}*.html",
-            f"{reports_dir}/*{target_ip}*.pdf", 
-            f"{reports_dir}/*{target_ip}*.json",
-            f"{reports_dir}/*{target_ip}*.md"
-        ]
-        
-        for pattern in patterns:
-            files = glob.glob(pattern)
-            for file_path in files:
-                file_info = os.stat(file_path)
-                file_name = os.path.basename(file_path)
-                file_ext = file_name.split('.')[-1]
-                
-                reports.append({
-                    'filename': file_name,
-                    'type': file_ext,
-                    'size': file_info.st_size,
-                    'created': datetime.fromtimestamp(file_info.st_ctime).isoformat(),
-                    'download_url': f"/api/reports/download/{file_ext}/{target_ip}",
-                    'full_path': file_path
-                })
-        
-        # Sort by creation time, newest first
-        reports.sort(key=lambda x: x['created'], reverse=True)
-        
-        logger.info(f"Found {len(reports)} reports for {target_ip}")
-        
-        return {'target_ip': target_ip, 'reports': reports, 'reports_directory': str(reports_dir)}
-        
-    except Exception as e:
-        logger.error(f"Failed to list reports for {target_ip}: {e}")
+        logger.error(f"Download failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/reports/test/{target_ip}")
-async def test_report_generation(target_ip: str):
-    """Test endpoint to generate a sample report for testing downloads"""
+@app.get("/test/create/{target_ip}")
+async def create_test_files(target_ip: str):
+    """Create test files for download testing"""
     try:
-        logger.info(f"Generating test report for {target_ip}")
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Generate test HTML report
+        # Create test HTML
         html_content = f"""<!DOCTYPE html>
 <html><head><title>Test Report - {target_ip}</title></head>
-<body>
-<h1>Security Assessment Report</h1>
-<p><strong>Target:</strong> {target_ip}</p>
-<p><strong>Generated:</strong> {datetime.now().isoformat()}</p>
-<p>This is a test report to verify download functionality.</p>
-</body></html>"""
+<body><h1>Test Security Report</h1><p>Target: {target_ip}</p><p>This is a test file.</p></body></html>"""
         
-        html_path = reports_dir / f"test_report_{target_ip}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        with open(html_path, 'w', encoding='utf-8') as f:
+        html_path = reports_dir / f"security_report_{target_ip}_{timestamp}.html"
+        with open(html_path, 'w') as f:
             f.write(html_content)
         
-        # Generate test PDF (simple text file for testing)
-        pdf_content = f"TEST SECURITY ASSESSMENT REPORT\nTarget: {target_ip}\nGenerated: {datetime.now().isoformat()}\n\nThis is a test report file."
+        # Create test PDF
+        pdf_content = f"TEST SECURITY REPORT\nTarget: {target_ip}\nGenerated: {datetime.now()}\nThis is a test PDF file."
         
-        pdf_path = reports_dir / f"test_report_{target_ip}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        with open(pdf_path, 'w', encoding='utf-8') as f:
+        pdf_path = reports_dir / f"security_report_{target_ip}_{timestamp}.pdf"  
+        with open(pdf_path, 'w') as f:
             f.write(pdf_content)
         
-        # Generate test JSON
-        json_content = {
-            "target_ip": target_ip,
-            "report_type": "test",
-            "generated": datetime.now().isoformat(),
-            "test_data": {
-                "vulnerabilities": 2,
-                "services": 3,
-                "risk_level": "medium"
-            }
-        }
-        
-        json_path = reports_dir / f"test_report_{target_ip}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(json_content, f, indent=2)
-        
-        logger.info(f"Test reports generated for {target_ip}")
-        
         return {
-            "message": "Test reports generated successfully",
-            "files": [str(html_path.name), str(pdf_path.name), str(json_path.name)],
-            "download_urls": {
-                "html": f"/api/reports/download/html/{target_ip}",
-                "pdf": f"/api/reports/download/pdf/{target_ip}",
-                "json": f"/api/reports/download/json/{target_ip}"
-            }
+            "message": "Test files created",
+            "html_url": f"/download/html/{target_ip}",
+            "pdf_url": f"/download/pdf/{target_ip}",
+            "files": [html_path.name, pdf_path.name]
         }
         
     except Exception as e:
-        logger.error(f"Failed to generate test reports for {target_ip}: {e}")
+        logger.error(f"Failed to create test files: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/scan/{session_id}/status")
@@ -365,7 +310,7 @@ async def get_results(session_id: str):
             "analyst_result": session.analyst_result.model_dump() if session.analyst_result else None,
             "poc_results": [p.model_dump() for p in session.poc_results] if session.poc_results else [],
             "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else [],
-            "report_data": session.report_data.model_dump() if session.report_data else None
+            "report_data": session.report_data if session.report_data else None
         }
         
         return response
@@ -393,7 +338,5 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting BreachPilot Professional API server...")
-    logger.info(f"Reports directory: {reports_dir}")
-    logger.info(f"Data directory: {config.DATA_DIR}")
+    logger.info(f"Starting server with reports directory: {reports_dir}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
