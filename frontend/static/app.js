@@ -290,118 +290,53 @@ createApp({
             }
         },
         
-        async viewReport() {
+        // FIXED: Simple and reliable download methods
+        viewReport() {
             if (!this.targetIp) {
                 alert('Target IP not available');
                 return;
             }
             
-            try {
-                // Use the new API endpoint for HTML report
-                const reportUrl = `/api/reports/download/html/${this.targetIp}`;
-                window.open(reportUrl, '_blank');
-            } catch (error) {
-                console.error('Error viewing report:', error);
-                alert('Failed to view report: ' + error.message);
-            }
+            const reportUrl = `/download/html/${this.targetIp}`;
+            console.log('Opening HTML report:', reportUrl);
+            window.open(reportUrl, '_blank');
         },
         
-        async downloadReport() {
+        downloadReport() {
             if (!this.targetIp) {
                 alert('Target IP not available');
                 return;
             }
             
-            try {
-                // Use the new API endpoint for PDF download
-                const pdfUrl = `/api/reports/download/pdf/${this.targetIp}`;
-                
-                // Create a temporary link and trigger download
-                const link = document.createElement('a');
-                link.href = pdfUrl;
-                link.download = `security_assessment_${this.targetIp}_${new Date().toISOString().split('T')[0]}.pdf`;
-                
-                // Add to DOM, click, and remove
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                console.log('PDF download initiated:', pdfUrl);
-            } catch (error) {
-                console.error('Error downloading report:', error);
-                alert('Failed to download report: ' + error.message);
-            }
+            const pdfUrl = `/download/pdf/${this.targetIp}`;
+            console.log('Downloading PDF from:', pdfUrl);
+            
+            // Simple direct download
+            window.location.href = pdfUrl;
         },
         
-        // Alternative download method with better error handling
-        async downloadReportWithFetch() {
+        // Test method to create files for immediate testing
+        async createTestFiles() {
             if (!this.targetIp) {
-                alert('Target IP not available');
+                alert('Please enter a target IP first');
                 return;
             }
             
             try {
-                const pdfUrl = `/api/reports/download/pdf/${this.targetIp}`;
+                const response = await axios.get(`/test/create/${this.targetIp}`);
+                console.log('Test files created:', response.data);
+                alert('Test files created successfully! You can now test the download buttons.');
                 
-                // Fetch the PDF data
-                const response = await fetch(pdfUrl);
+                // Set report result so buttons become active
+                this.reportResult = {
+                    message: "Test report generated",
+                    html_download_url: response.data.html_url,
+                    pdf_download_url: response.data.pdf_url
+                };
                 
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        // Try to list available reports
-                        const listResponse = await fetch(`/api/reports/list/${this.targetIp}`);
-                        if (listResponse.ok) {
-                            const reportsList = await listResponse.json();
-                            console.log('Available reports:', reportsList);
-                            
-                            if (reportsList.reports && reportsList.reports.length > 0) {
-                                const pdfReport = reportsList.reports.find(r => r.type === 'pdf');
-                                if (pdfReport) {
-                                    // Use the direct download URL from the list
-                                    const link = document.createElement('a');
-                                    link.href = pdfReport.download_url;
-                                    link.download = pdfReport.filename;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    return;
-                                } else {
-                                    alert('No PDF report found. Please generate a report first.');
-                                    return;
-                                }
-                            } else {
-                                alert('No reports found. Please generate a report first.');
-                                return;
-                            }
-                        } else {
-                            alert('Report not found. Please generate a report first.');
-                            return;
-                        }
-                    } else {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                }
-                
-                // Convert response to blob
-                const blob = await response.blob();
-                
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `security_assessment_${this.targetIp}_${new Date().toISOString().split('T')[0]}.pdf`;
-                
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                // Clean up
-                window.URL.revokeObjectURL(url);
-                
-                console.log('PDF downloaded successfully');
             } catch (error) {
-                console.error('Error downloading report:', error);
-                alert('Failed to download PDF report: ' + error.message);
+                console.error('Error creating test files:', error);
+                alert('Failed to create test files: ' + error.message);
             }
         },
         
@@ -531,6 +466,8 @@ createApp({
     
     mounted() {
         console.log('BreachPilot Professional Security Assessment Framework loaded');
-        console.log('PDF download endpoint: /api/reports/download/pdf/{target_ip}');
+        console.log('PDF download endpoint: /download/pdf/{target_ip}');
+        console.log('HTML report endpoint: /download/html/{target_ip}');
+        console.log('Test file creation: /test/create/{target_ip}');
     }
 }).mount('#app');
