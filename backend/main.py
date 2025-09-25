@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from typing import List, Dict, Any
 import asyncio
 import json
 import logging
+from pathlib import Path
 from backend.models import ScanRequest, PoCInfo
 from backend.orchestrator import ScanOrchestrator
 from backend.config import config
@@ -15,6 +17,11 @@ logging.getLogger("uvicorn.access").addFilter(lambda r: "/results" not in r.getM
 
 app = FastAPI(title="BreachPilot Professional API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Mount static files for reports
+reports_dir = config.REPORTS_DIR
+reports_dir.mkdir(exist_ok=True)
+app.mount("/reports", StaticFiles(directory=str(reports_dir)), name="reports")
 
 orchestrator = ScanOrchestrator()
 active_connections: Dict[str, WebSocket] = {}
@@ -138,6 +145,111 @@ async def generate_report(session_id: str):
         return result
     except Exception as e:
         logger.error(f"Report generation failed for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/download/{report_type}/{target_ip}")
+async def download_report(report_type: str, target_ip: str):
+    """Download generated reports (HTML/PDF/JSON)"""
+    try:
+        # Find the most recent report file for this target
+        import glob
+        import os
+        
+        if report_type not in ['html', 'pdf', 'json', 'md']:
+            raise HTTPException(status_code=400, detail="Invalid report type. Must be html, pdf, json, or md")
+        
+        # Search for report files
+        pattern = f"{reports_dir}/*{target_ip}*.{report_type}"
+        files = glob.glob(pattern)
+        
+        if not files:
+            # Try alternative patterns
+            patterns = [
+                f"{reports_dir}/enterprise_assessment_{target_ip}_*.{report_type}",
+                f"{reports_dir}/professional_assessment_{target_ip}*.{report_type}",
+                f"{reports_dir}/{target_ip}_report.{report_type}",
+                f"{reports_dir}/executive_summary_{target_ip}_*.{report_type}" if report_type == 'md' else None
+            ]
+            
+            for pattern in patterns:
+                if pattern:
+                    files = glob.glob(pattern)
+                    if files:
+                        break
+        
+        if not files:
+            raise HTTPException(status_code=404, detail=f"No {report_type.upper()} report found for target {target_ip}")
+        
+        # Get the most recent file
+        latest_file = max(files, key=os.path.getctime)
+        file_path = Path(latest_file)
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Report file not found")
+        
+        # Determine content type and filename
+        content_types = {
+            'html': 'text/html',
+            'pdf': 'application/pdf',
+            'json': 'application/json',
+            'md': 'text/markdown'
+        }
+        
+        content_type = content_types.get(report_type, 'application/octet-stream')
+        filename = f"security_assessment_{target_ip}.{report_type}"
+        
+        logger.info(f"Serving {report_type.upper()} report: {file_path}")
+        
+        return FileResponse(
+            path=str(file_path),
+            media_type=content_type,
+            filename=filename
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download {report_type} report for {target_ip}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/list/{target_ip}")
+async def list_reports(target_ip: str):
+    """List available reports for a target"""
+    try:
+        import glob
+        import os
+        from datetime import datetime
+        
+        reports = []
+        patterns = [
+            f"{reports_dir}/*{target_ip}*.html",
+            f"{reports_dir}/*{target_ip}*.pdf", 
+            f"{reports_dir}/*{target_ip}*.json",
+            f"{reports_dir}/*{target_ip}*.md"
+        ]
+        
+        for pattern in patterns:
+            files = glob.glob(pattern)
+            for file_path in files:
+                file_info = os.stat(file_path)
+                file_name = os.path.basename(file_path)
+                file_ext = file_name.split('.')[-1]
+                
+                reports.append({
+                    'filename': file_name,
+                    'type': file_ext,
+                    'size': file_info.st_size,
+                    'created': datetime.fromtimestamp(file_info.st_ctime).isoformat(),
+                    'download_url': f"/api/reports/download/{file_ext}/{target_ip}"
+                })
+        
+        # Sort by creation time, newest first
+        reports.sort(key=lambda x: x['created'], reverse=True)
+        
+        return {'target_ip': target_ip, 'reports': reports}
+        
+    except Exception as e:
+        logger.error(f"Failed to list reports for {target_ip}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/scan/{session_id}/status")
