@@ -255,6 +255,35 @@ createApp({
             return this.exploitResults.find(r => r.cve_id === cveId && r.poc_index === pocIndex);
         },
         
+        getExploitStatus(result) {
+            if (!result) return 'pending';
+            if (result.success) return 'success';
+            if (result.error_details) return 'error';
+            return 'failed';
+        },
+        
+        getExploitStatusText(result) {
+            if (!result) return 'Pending';
+            if (result.success) return 'VULNERABLE - EXPLOIT SUCCESSFUL';
+            if (result.error_details) return 'EXPLOIT FAILED - ' + result.error_details;
+            if (result.execution_output && result.execution_output.includes('simulation')) return 'SIMULATION - NOT REAL EXPLOIT';
+            return 'EXPLOIT FAILED';
+        },
+        
+        getExploitStatusClass(result) {
+            if (result && result.execution_output && result.execution_output.includes('simulation')) {
+                return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+            }
+            
+            const status = this.getExploitStatus(result);
+            switch (status) {
+                case 'success': return 'text-green-600 bg-green-50 border-green-200';
+                case 'error': return 'text-red-600 bg-red-50 border-red-200';
+                case 'failed': return 'text-orange-600 bg-orange-50 border-orange-200';
+                default: return 'text-gray-600 bg-gray-50 border-gray-200';
+            }
+        },
+        
         // Report Generation Methods
         async generateReport() {
             this.reportGenerating = true;

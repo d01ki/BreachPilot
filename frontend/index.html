@@ -142,9 +142,9 @@
                             <div>
                                 <span class="opacity-80">Domain Controller:</span>
                                 <div class="font-semibold">{{isDomainController(nmapResult) ? 'Detected' : 'Not Detected'}}</div>
-                            </div>
-                        </div>
-                        
+                </div>
+            </div>
+
                         <div v-if="getServiceInfo(nmapResult)" class="mt-4 pt-3 border-t border-blue-400 border-opacity-30">
                             <h4 class="font-semibold mb-2">Service Information</h4>
                             <div class="text-sm opacity-90" v-html="getServiceInfo(nmapResult)"></div>
@@ -179,9 +179,9 @@
                                                 {{getPortRisk(port.port, port.service)}}
                                             </span>
                                         </td>
-                                    </tr>
+                        </tr>
                                 </tbody>
-                            </table>
+                    </table>
                         </div>
                     </div>
                     
@@ -378,13 +378,11 @@
                                 </div>
                                 
                                 <div v-if="getExploitResult(pocResult.cve_id, index)" class="mt-3 border-t pt-2">
-                                    <div class="execution-result" 
-                                         :class="getExploitResult(pocResult.cve_id, index).success ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'"
-                                         class="border rounded p-2">
+                                    <div class="execution-result border rounded p-3" 
+                                         :class="getExploitStatusClass(getExploitResult(pocResult.cve_id, index))">
                                         <div class="flex items-center justify-between mb-2">
-                                            <span :class="getExploitResult(pocResult.cve_id, index).success ? 'text-red-600' : 'text-green-600'" 
-                                                  class="text-sm font-bold">
-                                                {{getExploitResult(pocResult.cve_id, index).success ? 'VULNERABLE - EXPLOIT SUCCESSFUL' : 'NOT VULNERABLE - EXPLOIT FAILED'}}
+                                            <span class="text-sm font-bold">
+                                                {{getExploitStatusText(getExploitResult(pocResult.cve_id, index))}}
                                             </span>
                                             <button @click="toggleExploitOutput(pocResult.cve_id, index)" 
                                                     class="text-xs text-blue-600 hover:underline">
@@ -392,8 +390,50 @@
                                             </button>
                                         </div>
                                         
+                                        <!-- DC Information -->
+                                        <div v-if="getExploitResult(pocResult.cve_id, index).dc_name || getExploitResult(pocResult.cve_id, index).domain" 
+                                             class="text-xs text-gray-600 mb-2">
+                                            <span v-if="getExploitResult(pocResult.cve_id, index).dc_name">
+                                                DC: {{getExploitResult(pocResult.cve_id, index).dc_name}}
+                                            </span>
+                                            <span v-if="getExploitResult(pocResult.cve_id, index).domain">
+                                                | Domain: {{getExploitResult(pocResult.cve_id, index).domain}}
+                                            </span>
+                                        </div>
+                                        
+                                        <!-- Command Used -->
+                                        <div v-if="getExploitResult(pocResult.cve_id, index).command" 
+                                             class="text-xs text-gray-600 mb-2">
+                                            Command: <code class="bg-gray-100 px-1 rounded">{{getExploitResult(pocResult.cve_id, index).command}}</code>
+                                        </div>
+                                        
                                         <div v-if="isExploitOutputVisible(pocResult.cve_id, index)" class="mt-2">
-                                            <pre class="code-block p-2 rounded text-xs overflow-auto max-h-32">{{getExploitResult(pocResult.cve_id, index).execution_output || 'No detailed output available'}}</pre>
+                                            <div class="text-xs font-semibold mb-1">Execution Output:</div>
+                                            <pre class="code-block p-2 rounded text-xs overflow-auto max-h-48 bg-gray-900 text-green-400">{{getExploitResult(pocResult.cve_id, index).execution_output || getExploitResult(pocResult.cve_id, index).output || 'No detailed output available'}}</pre>
+                                            
+                                            <!-- Error Details -->
+                                            <div v-if="getExploitResult(pocResult.cve_id, index).error_details || getExploitResult(pocResult.cve_id, index).failure_reason" class="mt-2">
+                                                <div class="text-xs font-semibold mb-1 text-red-600">Error Details:</div>
+                                                <div class="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                                    {{getExploitResult(pocResult.cve_id, index).error_details || getExploitResult(pocResult.cve_id, index).failure_reason}}
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Return Code -->
+                                            <div v-if="getExploitResult(pocResult.cve_id, index).return_code !== undefined" class="mt-2">
+                                                <div class="text-xs font-semibold mb-1">Return Code:</div>
+                                                <div class="text-xs" :class="getExploitResult(pocResult.cve_id, index).return_code === 0 ? 'text-green-600' : 'text-red-600'">
+                                                    {{getExploitResult(pocResult.cve_id, index).return_code}}
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Evidence -->
+                                            <div v-if="getExploitResult(pocResult.cve_id, index).evidence && getExploitResult(pocResult.cve_id, index).evidence.length" class="mt-2">
+                                                <div class="text-xs font-semibold mb-1 text-green-600">Evidence:</div>
+                                                <ul class="text-xs text-green-600">
+                                                    <li v-for="evidence in getExploitResult(pocResult.cve_id, index).evidence" :key="evidence">• {{evidence}}</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

