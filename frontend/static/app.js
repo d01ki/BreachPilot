@@ -202,11 +202,6 @@ createApp({
                 });
                 this.pocResults = response.data;
                 console.log('Exploit search results:', this.pocResults);
-                
-                const zerologonResult = this.pocResults.find(r => r.cve_id === 'CVE-2020-1472');
-                if (zerologonResult && zerologonResult.available_pocs.some(p => p.source === 'BreachPilot Built-in')) {
-                    console.log('Zerologon exploit prepared and ready for execution');
-                }
             } catch (error) {
                 console.error('Error searching exploits:', error);
                 alert('Failed to search exploits: ' + (error.response?.data?.detail || error.message));
@@ -233,10 +228,6 @@ createApp({
                 });
                 
                 console.log('Exploit execution result:', response.data);
-                
-                if (cveId === 'CVE-2020-1472') {
-                    console.log('Zerologon execution completed:', response.data.success ? 'VULNERABLE!' : 'Not vulnerable');
-                }
                 
             } catch (error) {
                 console.error('Error executing exploit:', error);
@@ -300,17 +291,117 @@ createApp({
         },
         
         async viewReport() {
-            if (this.reportResult?.report_url) {
-                window.open(this.reportResult.report_url, '_blank');
+            if (!this.targetIp) {
+                alert('Target IP not available');
+                return;
+            }
+            
+            try {
+                // Use the new API endpoint for HTML report
+                const reportUrl = `/api/reports/download/html/${this.targetIp}`;
+                window.open(reportUrl, '_blank');
+            } catch (error) {
+                console.error('Error viewing report:', error);
+                alert('Failed to view report: ' + error.message);
             }
         },
         
         async downloadReport() {
-            if (this.reportResult?.pdf_url) {
+            if (!this.targetIp) {
+                alert('Target IP not available');
+                return;
+            }
+            
+            try {
+                // Use the new API endpoint for PDF download
+                const pdfUrl = `/api/reports/download/pdf/${this.targetIp}`;
+                
+                // Create a temporary link and trigger download
                 const link = document.createElement('a');
-                link.href = this.reportResult.pdf_url;
+                link.href = pdfUrl;
                 link.download = `security_assessment_${this.targetIp}_${new Date().toISOString().split('T')[0]}.pdf`;
+                
+                // Add to DOM, click, and remove
+                document.body.appendChild(link);
                 link.click();
+                document.body.removeChild(link);
+                
+                console.log('PDF download initiated:', pdfUrl);
+            } catch (error) {
+                console.error('Error downloading report:', error);
+                alert('Failed to download report: ' + error.message);
+            }
+        },
+        
+        // Alternative download method with better error handling
+        async downloadReportWithFetch() {
+            if (!this.targetIp) {
+                alert('Target IP not available');
+                return;
+            }
+            
+            try {
+                const pdfUrl = `/api/reports/download/pdf/${this.targetIp}`;
+                
+                // Fetch the PDF data
+                const response = await fetch(pdfUrl);
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Try to list available reports
+                        const listResponse = await fetch(`/api/reports/list/${this.targetIp}`);
+                        if (listResponse.ok) {
+                            const reportsList = await listResponse.json();
+                            console.log('Available reports:', reportsList);
+                            
+                            if (reportsList.reports && reportsList.reports.length > 0) {
+                                const pdfReport = reportsList.reports.find(r => r.type === 'pdf');
+                                if (pdfReport) {
+                                    // Use the direct download URL from the list
+                                    const link = document.createElement('a');
+                                    link.href = pdfReport.download_url;
+                                    link.download = pdfReport.filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    return;
+                                } else {
+                                    alert('No PDF report found. Please generate a report first.');
+                                    return;
+                                }
+                            } else {
+                                alert('No reports found. Please generate a report first.');
+                                return;
+                            }
+                        } else {
+                            alert('Report not found. Please generate a report first.');
+                            return;
+                        }
+                    } else {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                }
+                
+                // Convert response to blob
+                const blob = await response.blob();
+                
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `security_assessment_${this.targetIp}_${new Date().toISOString().split('T')[0]}.pdf`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                
+                console.log('PDF downloaded successfully');
+            } catch (error) {
+                console.error('Error downloading report:', error);
+                alert('Failed to download PDF report: ' + error.message);
             }
         },
         
@@ -440,5 +531,6 @@ createApp({
     
     mounted() {
         console.log('BreachPilot Professional Security Assessment Framework loaded');
+        console.log('PDF download endpoint: /api/reports/download/pdf/{target_ip}');
     }
 }).mount('#app');
