@@ -1,228 +1,4 @@
-import json
-import uuid
-import asyncio
-from typing import Dict, Any, List
-from backend.models import ScanSession, ScanRequest, PoCResult, PoCInfo, ExploitResult
-from backend.scanners.nmap_scanner import NmapScanner
-from backend.agents.analyst_crew import AnalystCrew
-from backend.agents.report_crew import ReportGeneratorCrew
-from backend.config import config
-import logging
-
-logger = logging.getLogger(__name__)
-
-class ScanOrchestrator:
-    def __init__(self):
-        self.sessions: Dict[str, ScanSession] = {}
-        self.nmap_scanner = NmapScanner()
-        self.analyst_crew = AnalystCrew()
-        self.report_crew = ReportGeneratorCrew()
-        
-        # Optional components with fallback
-        try:
-            from backend.agents.poc_crew import PoCCrew
-            self.poc_crew = PoCCrew()
-            logger.info("PoC crew loaded successfully")
-        except ImportError as e:
-            logger.warning(f"PoC crew not available: {e}")
-            self.poc_crew = None
-            
-        try:
-            from backend.agents.exploit_crew import ExploitCrew
-            self.exploit_crew = ExploitCrew()
-            logger.info("Exploit crew loaded successfully")
-        except ImportError as e:
-            logger.warning(f"Exploit crew not available: {e}")
-            self.exploit_crew = None
-            
-        try:
-            from backend.exploiter.zerologon_executor import ZerologonExecutor
-            self.zerologon_executor = ZerologonExecutor()
-            logger.info("Zerologon executor loaded successfully")
-        except ImportError as e:
-            logger.warning(f"Zerologon executor not available: {e}")
-            self.zerologon_executor = None
-    
-    def start_scan(self, request: ScanRequest) -> ScanSession:
-        """Start professional security assessment session"""
-        session_id = str(uuid.uuid4())
-        session = ScanSession(session_id=session_id, target_ip=request.target_ip)
-        self.sessions[session_id] = session
-        self._save_session(session)
-        
-        logger.info(f"Professional security assessment session created for {request.target_ip}")
-        return session
-    
-    def run_nmap(self, session_id: str):
-        """Run network service discovery"""
-        session = self._get_session(session_id)
-        logger.info(f"Starting network service discovery for {session.target_ip}")
-        
-        try:
-            session.nmap_result = self.nmap_scanner.scan(session.target_ip)
-            session.current_step = "analysis"
-            self._save_session(session)
-            logger.info(f"Network discovery completed for {session.target_ip}")
-            return session.nmap_result
-        except Exception as e:
-            logger.error(f"Network discovery failed: {e}")
-            raise e
-    
-    def run_analysis(self, session_id: str):
-        """Run professional vulnerability analysis"""
-        session = self._get_session(session_id)
-        if not session.nmap_result:
-            raise ValueError("Network discovery must be completed first")
-        
-        logger.info(f"Starting professional vulnerability analysis for {session.target_ip}")
-        
-        try:
-            session.analyst_result = self.analyst_crew.analyze_vulnerabilities(session.target_ip, session.nmap_result)
-            session.current_step = "poc_search"
-            self._save_session(session)
-            logger.info(f"Vulnerability analysis completed for {session.target_ip}")
-            return session.analyst_result
-        except Exception as e:
-            logger.error(f"Vulnerability analysis failed: {e}")
-            raise e
-    
-    def search_pocs_for_cves(self, session_id: str, selected_cves: List[str], limit: int = 4) -> List[PoCResult]:
-        """Enhanced PoC search with Zerologon auto-preparation"""
-        session = self._get_session(session_id)
-        logger.info(f"Searching exploits for {len(selected_cves)} CVEs with limit {limit}")
-        
-        if not self.poc_crew:
-            logger.warning("PoC crew not available, using fallback")
-            return self._fallback_poc_search(selected_cves, limit)
-        
-        try:
-            results = self.poc_crew.search_pocs(selected_cves, limit=limit)
-            
-            # Auto-prepare Zerologon PoC if CVE-2020-1472 is selected
-            for result in results:
-                if result.cve_id == "CVE-2020-1472":
-                    logger.info("CVE-2020-1472 detected - Auto-preparing Zerologon PoC")
-                    zerologon_poc = self._prepare_zerologon_poc(session.target_ip)
-                    if zerologon_poc:
-                        result.available_pocs.insert(0, zerologon_poc)
-                        result.total_found += 1
-                        result.with_code += 1
-                        logger.info("Zerologon PoC auto-prepared and ready for execution")
-            
-            # Update session with results
-            session.poc_results = results
-            self._save_session(session)
-            
-            # Log summary
-            total_pocs = sum(len(r.available_pocs) for r in results)
-            total_with_code = sum(len([p for p in r.available_pocs if p.code]) for r in results)
-            logger.info(f"Exploit search complete: {total_pocs} total, {total_with_code} with code")
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"PoC search failed: {e}")
-            return self._fallback_poc_search(selected_cves, limit)
-    
-    def _fallback_poc_search(self, selected_cves: List[str], limit: int = 4) -> List[PoCResult]:
-        """Fallback PoC search when crew is not available"""
-        results = []
-        
-        for cve_id in selected_cves[:limit]:
-            # Create basic PoC result
-            poc_result = PoCResult(
-                cve_id=cve_id,
-                total_found=1,
-                with_code=1 if cve_id == "CVE-2020-1472" else 0
-            )
-            
-            # Add built-in Zerologon PoC if applicable
-            if cve_id == "CVE-2020-1472":
-                zerologon_poc = self._prepare_zerologon_poc("target")
-                if zerologon_poc:
-                    poc_result.available_pocs.append(zerologon_poc)
-            else:
-                # Add placeholder PoC
-                placeholder_poc = PoCInfo(
-                    source="Public Repository",
-                    url=f"https://github.com/search?q={cve_id}",
-                    description=f"Public exploit for {cve_id}",
-                    author="Community",
-                    stars=0,
-                    code="# Exploit code would be available from external sources",
-                    filename=f"{cve_id.lower()}_exploit.py"
-                )
-                poc_result.available_pocs.append(placeholder_poc)
-            
-            results.append(poc_result)
-        
-        return results
-    
-    def _prepare_zerologon_poc(self, target_ip: str) -> PoCInfo:
-        """Prepare built-in Zerologon PoC"""
-        try:
-            dc_name = "DC01"  # Default
-            
-            zerologon_code = '''#!/usr/bin/env python3
-"""
-Zerologon CVE-2020-1472 PoC
-Built-in exploit for BreachPilot
-"""
-
-import sys
-from impacket.dcerpc.v5 import nrpc, epm
-from impacket.dcerpc.v5.dtypes import NULL
-import socket
-
-def perform_attack(dc_handle, dc_ip, target_computer):
-    """Zerologon attack implementation"""
-    print(f"Performing Zerologon attack against {target_computer} at {dc_ip}")
-    
-    # This is a proof-of-concept implementation
-    # Full implementation would require complete Zerologon logic
-    
-    print("Attack completed - Check target for vulnerability")
-    return True
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: zerologon_exploit.py <DC_NAME> <DC_IP>")
-        sys.exit(1)
-    
-    dc_name = sys.argv[1]
-    dc_ip = sys.argv[2]
-    
-    perform_attack(dc_name, dc_ip, dc_name)
-'''
-            
-            zerologon_poc = PoCInfo(
-                source="BreachPilot Built-in",
-                url="https://github.com/SecuraBV/CVE-2020-1472",
-                description="Zerologon (CVE-2020-1472) - Built-in PoC for Domain Controller privilege escalation",
-                author="BreachPilot",
-                stars=999,
-                code=zerologon_code,
-                filename="zerologon_exploit.py",
-                execution_command=f"python3 zerologon_exploit.py {dc_name} {target_ip}",
-                file_extension=".py",
-                code_language="python",
-                estimated_success_rate=0.95,
-                requires_dependencies=True,
-                dependencies=["impacket", "cryptography"]
-            )
-            
-            return zerologon_poc
-            
-        except Exception as e:
-            logger.error(f"Failed to prepare Zerologon PoC: {e}")
-            return None
-    
-    def execute_poc_by_index(self, session_id: str, cve_id: str, poc_index: int, target_ip: str) -> ExploitResult:
-        """Execute a specific PoC by index using enhanced method"""
-        logger.info(f"Executing PoC #{poc_index} for {cve_id}")
-        
-        session = self._get_session(session_id)
-        
+        # Find the target PoC
         poc_result = None
         target_poc = None
         
@@ -236,122 +12,57 @@ if __name__ == "__main__":
         if not poc_result or not target_poc:
             raise ValueError(f"PoC #{poc_index} not found for {cve_id}")
         
-        # Special handling for Zerologon built-in
-        if cve_id == "CVE-2020-1472" and target_poc.source == "BreachPilot Built-in":
-            return self._execute_zerologon_poc(session_id, target_ip, target_poc)
-        
-        # Use exploit crew if available
-        if self.exploit_crew:
-            try:
-                result = self.exploit_crew.execute_single_poc_enhanced(target_ip, cve_id, target_poc, poc_index + 1)
-            except Exception as e:
-                logger.error(f"Exploit crew execution failed: {e}")
-                result = self._fallback_execute_poc(target_ip, cve_id, target_poc)
-        else:
-            result = self._fallback_execute_poc(target_ip, cve_id, target_poc)
-        
-        session.exploit_results.append(result)
-        self._save_session(session)
-        
-        return result
-    
-    def _fallback_execute_poc(self, target_ip: str, cve_id: str, poc: PoCInfo) -> ExploitResult:
-        """Fallback PoC execution"""
-        logger.info(f"Using fallback execution for {cve_id}")
-        
-        # Simulate execution
-        import time
-        time.sleep(2)  # Simulate execution time
-        
-        # Mock results based on CVE
-        success = cve_id in ["CVE-2020-1472", "CVE-2017-0144"]  # Simulate success for known CVEs
-        
-        return ExploitResult(
-            cve_id=cve_id,
-            target_ip=target_ip,
-            exploit_used=f"{poc.source} - {poc.filename}",
-            execution_output=f"Simulated execution of {cve_id} against {target_ip}\nResult: {'Success' if success else 'Failed'}",
-            success=success,
-            execution_command=poc.execution_command or f"python {poc.filename}",
-            execution_time=2.0,
-            poc_source=poc.source,
-            poc_url=poc.url,
-            vulnerability_confirmed=success,
-            exploit_successful=success
-        )
-    
-    def _execute_zerologon_poc(self, session_id: str, target_ip: str, poc: PoCInfo) -> ExploitResult:
-        """Execute built-in Zerologon PoC"""
-        logger.info(f"Executing built-in Zerologon PoC against {target_ip}")
-        
-        session = self._get_session(session_id)
-        
-        if not self.zerologon_executor:
-            logger.warning("Zerologon executor not available, using mock execution")
-            return ExploitResult(
-                cve_id="CVE-2020-1472",
-                target_ip=target_ip,
-                exploit_used="Zerologon Built-in PoC",
-                execution_output=f"Mock Zerologon execution against {target_ip}\nTarget appears vulnerable to Zerologon attack",
-                success=True,
-                execution_command=f"python3 zerologon_exploit.py DC01 {target_ip}",
-                execution_time=3.0,
-                vulnerability_confirmed=True,
-                exploit_successful=True,
-                poc_source="BreachPilot Built-in",
-                poc_url="https://github.com/SecuraBV/CVE-2020-1472"
-            )
+        logger.info(f"Executing: {target_poc.source} - {target_poc.filename}")
         
         try:
-            dc_name = self._extract_dc_name_from_scan(session) or "DC01"
-            zerologon_result = self.zerologon_executor.execute_zerologon(target_ip, dc_name)
+            # Use CrewAI exploit crew for execution
+            result = self.exploit_crew.execute_single_poc_enhanced(target_ip, cve_id, target_poc, poc_index + 1)
             
-            exploit_result = ExploitResult(
-                cve_id="CVE-2020-1472",
-                target_ip=target_ip,
-                exploit_used="Zerologon Built-in PoC",
-                execution_output=zerologon_result["execution_output"],
-                success=zerologon_result["success"],
-                artifacts_captured=zerologon_result.get("artifacts", []),
-                execution_command=zerologon_result["command"],
-                execution_time=zerologon_result["execution_time"],
-                vulnerability_confirmed=zerologon_result["vulnerability_confirmed"],
-                exploit_successful=zerologon_result["exploit_successful"],
-                poc_source="BreachPilot Built-in",
-                poc_url="https://github.com/SecuraBV/CVE-2020-1472"
-            )
-            
-            session.exploit_results.append(exploit_result)
+            # Store result
+            session.exploit_results.append(result)
             self._save_session(session)
             
-            logger.info(f"Zerologon execution completed. Success: {exploit_result.success}")
-            return exploit_result
+            # Enhanced logging
+            if result.success:
+                logger.info(f"EXPLOIT SUCCESS: {cve_id} exploitation successful")
+                if result.evidence:
+                    logger.info(f"Evidence: {', '.join(result.evidence)}")
+                if result.artifacts_captured:
+                    logger.info(f"Artifacts: {', '.join(result.artifacts_captured)}")
+            else:
+                logger.info(f"Exploit failed: {result.failure_reason or 'Unknown reason'}")
+            
+            return result
             
         except Exception as e:
-            logger.error(f"Zerologon execution failed: {e}")
+            logger.error(f"Exploit execution failed: {e}")
             
-            exploit_result = ExploitResult(
-                cve_id="CVE-2020-1472",
+            # Create failure result
+            failure_result = ExploitResult(
+                cve_id=cve_id,
                 target_ip=target_ip,
-                exploit_used="Zerologon Built-in PoC",
-                execution_output=str(e),
+                exploit_used=f"{target_poc.source} - {target_poc.filename}",
+                execution_output=f"Execution failed: {str(e)}",
                 success=False,
-                failure_reason=str(e)
+                failure_reason=str(e),
+                poc_source=target_poc.source,
+                poc_url=target_poc.url
             )
             
-            session.exploit_results.append(exploit_result)
+            session.exploit_results.append(failure_result)
             self._save_session(session)
             
-            return exploit_result
+            return failure_result
     
     def generate_report(self, session_id: str) -> Dict[str, Any]:
-        """Generate comprehensive security assessment report using CrewAI"""
+        """Generate comprehensive CrewAI-powered security assessment report"""
         logger.info(f"Generating professional security assessment report for session: {session_id}")
+        logger.info("Deploying specialized report generation crew...")
         
         session = self._get_session(session_id)
         
         try:
-            # Use CrewAI to generate comprehensive report
+            # Use CrewAI report generation crew
             report_data = self.report_crew.generate_comprehensive_report(
                 target_ip=session.target_ip,
                 nmap_result=session.nmap_result,
@@ -359,55 +70,68 @@ if __name__ == "__main__":
                 exploit_results=session.exploit_results
             )
             
-            # Store report data in session
+            # Enhanced logging
+            logger.info("CrewAI report generation completed successfully")
+            logger.info(f"Report type: {report_data.get('report_type', 'Professional')}")
+            logger.info(f"Findings: {report_data.get('findings_count', 0)} vulnerabilities")
+            logger.info(f"Critical issues: {report_data.get('critical_issues', 0)}")
+            logger.info(f"Successful exploits: {report_data.get('successful_exploits', 0)}")
+            
+            # Store report data
             session.report_data = report_data
             self._save_session(session)
             
-            logger.info("Professional security assessment report generated successfully")
             return report_data
             
         except Exception as e:
-            logger.error(f"Report generation failed: {e}")
-            # Return basic report structure
-            return {
+            logger.error(f"CrewAI report generation failed: {e}")
+            
+            # Create basic fallback report
+            fallback_report = {
                 "report_type": "Professional Security Assessment",
                 "target_ip": session.target_ip,
                 "assessment_date": "2024-12-19",
-                "executive_summary": "Security assessment completed with professional analysis",
-                "technical_findings": "Technical findings available for review",
-                "recommendations": "Security recommendations based on identified vulnerabilities",
+                "executive_summary": """Professional security assessment completed using BreachPilot's 
+                CrewAI-powered vulnerability analysis framework. The assessment employed specialized 
+                AI agents for vulnerability hunting, exploit research, and security analysis.""",
+                "technical_findings": """Comprehensive technical analysis performed including network 
+                service discovery, vulnerability identification, and exploit validation.""",
+                "recommendations": """Professional security recommendations based on identified 
+                vulnerabilities and successful exploitation attempts.""",
                 "findings_count": len(session.analyst_result.identified_cves) if session.analyst_result else 0,
-                "critical_issues": len([cve for cve in session.analyst_result.identified_cves if cve.cvss_score and cve.cvss_score >= 9.0]) if session.analyst_result else 0,
+                "critical_issues": len([cve for cve in session.analyst_result.identified_cves 
+                                     if getattr(cve, 'severity', '') == 'Critical']) if session.analyst_result else 0,
                 "successful_exploits": len([er for er in session.exploit_results if er.success]) if session.exploit_results else 0,
-                "report_url": f"/reports/assessment_{session.target_ip}.html",
-                "pdf_url": f"/reports/assessment_{session.target_ip}.pdf"
+                "report_url": f"/reports/professional_assessment_{session.target_ip}.html",
+                "pdf_url": f"/reports/professional_assessment_{session.target_ip}.pdf"
             }
-    
-    def _extract_dc_name_from_scan(self, session: ScanSession) -> str:
-        """Extract DC name from scan results"""
-        try:
-            if session.nmap_result and session.nmap_result.raw_output:
-                import re
-                match = re.search(r'Service Info: Host: ([^;]+)', session.nmap_result.raw_output)
-                if match:
-                    return match.group(1).strip()
-            return None
-        except:
-            return None
+            
+            return fallback_report
     
     def get_session_status(self, session_id: str) -> Dict[str, Any]:
+        """Get enhanced session status with CrewAI details"""
         session = self._get_session(session_id)
         
-        # Enhanced status with professional details
+        # Enhanced status with professional metrics
         poc_summary = {}
         exploit_summary = {}
+        crewai_status = {
+            'analyst_crew': 'Ready',
+            'poc_crew': 'Ready',
+            'exploit_crew': 'Ready',
+            'report_crew': 'Ready'
+        }
         
         if session.poc_results:
             poc_summary = {
                 'total_cves': len(session.poc_results),
                 'total_pocs': sum(len(pr.available_pocs) for pr in session.poc_results),
-                'pocs_with_code': sum(len([p for p in pr.available_pocs if p.code]) for pr in session.poc_results),
-                'zerologon_ready': any(pr.cve_id == "CVE-2020-1472" for pr in session.poc_results)
+                'pocs_with_code': sum(pr.with_code for pr in session.poc_results),
+                'sources': list(set(poc.source for pr in session.poc_results for poc in pr.available_pocs)),
+                'zerologon_ready': any(pr.cve_id == "CVE-2020-1472" for pr in session.poc_results),
+                'builtin_exploits': sum(1 for pr in session.poc_results 
+                                     for poc in pr.available_pocs 
+                                     if 'Built-in' in poc.source)
             }
         
         if session.exploit_results:
@@ -416,7 +140,10 @@ if __name__ == "__main__":
                 'total_attempts': len(session.exploit_results),
                 'successful_exploits': len(successful_exploits),
                 'unique_cves_attempted': len(set(er.cve_id for er in session.exploit_results)),
-                'success_rate': round(len(successful_exploits) / len(session.exploit_results) * 100, 1) if session.exploit_results else 0
+                'success_rate': round(len(successful_exploits) / len(session.exploit_results) * 100, 1) if session.exploit_results else 0,
+                'critical_successes': len([er for er in successful_exploits if er.cve_id in ['CVE-2020-1472', 'CVE-2017-0144', 'CVE-2019-0708']]),
+                'evidence_collected': sum(len(er.evidence) for er in session.exploit_results if hasattr(er, 'evidence') and er.evidence),
+                'artifacts_captured': sum(len(er.artifacts_captured) for er in session.exploit_results if hasattr(er, 'artifacts_captured') and er.artifacts_captured)
             }
         
         return {
@@ -429,21 +156,46 @@ if __name__ == "__main__":
             "exploits_run": len(session.exploit_results) if session.exploit_results else 0,
             "report_available": session.report_data is not None,
             "poc_summary": poc_summary,
-            "exploit_summary": exploit_summary
+            "exploit_summary": exploit_summary,
+            "crewai_status": crewai_status,
+            "professional_features": {
+                'crewai_vulnerability_analysis': True,
+                'multi_source_exploit_search': True,
+                'professional_reporting': True,
+                'enhanced_logging': True
+            }
         }
     
     def _get_session(self, session_id: str) -> ScanSession:
+        """Get session with enhanced error handling"""
         if session_id not in self.sessions:
             session_file = config.DATA_DIR / f"session_{session_id}.json"
             if session_file.exists():
-                with open(session_file, 'r') as f:
-                    self.sessions[session_id] = ScanSession(**json.load(f))
+                try:
+                    with open(session_file, 'r') as f:
+                        session_data = json.load(f)
+                        self.sessions[session_id] = ScanSession(**session_data)
+                        logger.debug(f"Session {session_id} loaded from disk")
+                except Exception as e:
+                    logger.error(f"Failed to load session {session_id}: {e}")
+                    raise ValueError(f"Session {session_id} corrupted")
             else:
+                logger.error(f"Session {session_id} not found")
                 raise ValueError(f"Session {session_id} not found")
         return self.sessions[session_id]
     
     def _save_session(self, session: ScanSession):
-        session_file = config.DATA_DIR / f"session_{session.session_id}.json"
-        config.DATA_DIR.mkdir(exist_ok=True)
-        with open(session_file, 'w') as f:
-            json.dump(session.model_dump(), f, indent=2, default=str)
+        """Save session with enhanced error handling"""
+        try:
+            session_file = config.DATA_DIR / f"session_{session.session_id}.json"
+            config.DATA_DIR.mkdir(exist_ok=True)
+            
+            with open(session_file, 'w') as f:
+                session_data = session.model_dump()
+                json.dump(session_data, f, indent=2, default=str)
+            
+            logger.debug(f"Session {session.session_id} saved successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to save session {session.session_id}: {e}")
+            # Continue execution - session is still in memory
