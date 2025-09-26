@@ -1,0 +1,232 @@
+{
+  "timestamp": "2025-09-26 02:47:09.248908",
+  "target_ip": "192.168.253.30",
+  "open_ports": [
+    {
+      "port": 53,
+      "state": "open",
+      "service": "domain",
+      "product": "Simple DNS Plus",
+      "version": ""
+    },
+    {
+      "port": 80,
+      "state": "open",
+      "service": "http",
+      "product": "Microsoft IIS httpd",
+      "version": "10.0"
+    },
+    {
+      "port": 88,
+      "state": "open",
+      "service": "kerberos-sec",
+      "product": "Microsoft Windows Kerberos",
+      "version": ""
+    },
+    {
+      "port": 135,
+      "state": "open",
+      "service": "msrpc",
+      "product": "Microsoft Windows RPC",
+      "version": ""
+    },
+    {
+      "port": 139,
+      "state": "open",
+      "service": "netbios-ssn",
+      "product": "Microsoft Windows netbios-ssn",
+      "version": ""
+    },
+    {
+      "port": 389,
+      "state": "open",
+      "service": "ldap",
+      "product": "Microsoft Windows Active Directory LDAP",
+      "version": ""
+    },
+    {
+      "port": 445,
+      "state": "open",
+      "service": "microsoft-ds",
+      "product": "",
+      "version": ""
+    },
+    {
+      "port": 464,
+      "state": "open",
+      "service": "kpasswd5",
+      "product": "",
+      "version": ""
+    },
+    {
+      "port": 593,
+      "state": "open",
+      "service": "ncacn_http",
+      "product": "Microsoft Windows RPC over HTTP",
+      "version": "1.0"
+    },
+    {
+      "port": 636,
+      "state": "open",
+      "service": "tcpwrapped",
+      "product": "",
+      "version": ""
+    },
+    {
+      "port": 3268,
+      "state": "open",
+      "service": "ldap",
+      "product": "Microsoft Windows Active Directory LDAP",
+      "version": ""
+    },
+    {
+      "port": 3269,
+      "state": "open",
+      "service": "tcpwrapped",
+      "product": "",
+      "version": ""
+    },
+    {
+      "port": 3389,
+      "state": "open",
+      "service": "ms-wbt-server",
+      "product": "Microsoft Terminal Services",
+      "version": ""
+    }
+  ],
+  "os_detection": {
+    "is_domain_controller": true,
+    "dc_info": {
+      "domain": "example.local0.",
+      "site": "Default-First-Site-Name",
+      "services": [
+        "LDAP",
+        "Kerberos",
+        "DNS",
+        "SMB"
+      ]
+    }
+  },
+  "services": [
+    {
+      "port": 53,
+      "protocol": "tcp",
+      "name": "domain",
+      "product": "Simple DNS Plus",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 80,
+      "protocol": "tcp",
+      "name": "http",
+      "product": "Microsoft IIS httpd",
+      "version": "10.0",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 88,
+      "protocol": "tcp",
+      "name": "kerberos-sec",
+      "product": "Microsoft Windows Kerberos",
+      "version": "",
+      "extrainfo": "server time: 2025-09-25 17:47:31Z",
+      "cpe": ""
+    },
+    {
+      "port": 135,
+      "protocol": "tcp",
+      "name": "msrpc",
+      "product": "Microsoft Windows RPC",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 139,
+      "protocol": "tcp",
+      "name": "netbios-ssn",
+      "product": "Microsoft Windows netbios-ssn",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 389,
+      "protocol": "tcp",
+      "name": "ldap",
+      "product": "Microsoft Windows Active Directory LDAP",
+      "version": "",
+      "extrainfo": "Domain: example.local0., Site: Default-First-Site-Name",
+      "cpe": ""
+    },
+    {
+      "port": 445,
+      "protocol": "tcp",
+      "name": "microsoft-ds",
+      "product": "",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 464,
+      "protocol": "tcp",
+      "name": "kpasswd5",
+      "product": "",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 593,
+      "protocol": "tcp",
+      "name": "ncacn_http",
+      "product": "Microsoft Windows RPC over HTTP",
+      "version": "1.0",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 636,
+      "protocol": "tcp",
+      "name": "tcpwrapped",
+      "product": "",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 3268,
+      "protocol": "tcp",
+      "name": "ldap",
+      "product": "Microsoft Windows Active Directory LDAP",
+      "version": "",
+      "extrainfo": "Domain: example.local0., Site: Default-First-Site-Name",
+      "cpe": ""
+    },
+    {
+      "port": 3269,
+      "protocol": "tcp",
+      "name": "tcpwrapped",
+      "product": "",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    },
+    {
+      "port": 3389,
+      "protocol": "tcp",
+      "name": "ms-wbt-server",
+      "product": "Microsoft Terminal Services",
+      "version": "",
+      "extrainfo": "",
+      "cpe": ""
+    }
+  ],
+  "vulnerabilities": [],
+  "raw_output": "Starting Nmap 7.94SVN ( https://nmap.org ) at 2025-09-26 02:47 JST\nNmap scan report for 192.168.253.30\nHost is up (0.0025s latency).\nNot shown: 987 filtered tcp ports (no-response)\nPORT     STATE SERVICE       VERSION\n53/tcp   open  domain        Simple DNS Plus\n80/tcp   open  http          Microsoft IIS httpd 10.0\n|_http-server-header: Microsoft-IIS/10.0\n|_http-csrf: Couldn't find any CSRF vulnerabilities.\n|_http-dombased-xss: Couldn't find any DOM based XSS.\n|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.\n88/tcp   open  kerberos-sec  Microsoft Windows Kerberos (server time: 2025-09-25 17:47:31Z)\n135/tcp  open  msrpc         Microsoft Windows RPC\n139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn\n389/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: example.local0., Site: Default-First-Site-Name)\n445/tcp  open  microsoft-ds?\n464/tcp  open  kpasswd5?\n593/tcp  open  ncacn_http    Microsoft Windows RPC over HTTP 1.0\n636/tcp  open  tcpwrapped\n3268/tcp open  ldap          Microsoft Windows Active Directory LDAP (Domain: example.local0., Site: Default-First-Site-Name)\n3269/tcp open  tcpwrapped\n3389/tcp open  ms-wbt-server Microsoft Terminal Services\nService Info: Host: DC2019; OS: Windows; CPE: cpe:/o:microsoft:windows\n\nHost script results:\n|_smb-vuln-ms10-061: Could not negotiate a connection:SMB: Failed to receive bytes: ERROR\n|_samba-vuln-cve-2012-1182: Could not negotiate a connection:SMB: Failed to receive bytes: ERROR\n|_smb-vuln-ms10-054: ERROR: Script execution failed (use -d to debug)\n\nService detection performed. Please report any incorrect results at https://nmap.org/submit/ .\nNmap done: 1 IP address (1 host up) scanned in 53.33 seconds\n",
+  "status": "completed"
+}

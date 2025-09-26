@@ -1,0 +1,21 @@
+{
+  "target_ip": "192.168.1.100",
+  "identified_cves": [
+    {
+      "cve_id": "CVE-2020-1472",
+      "severity": "critical",
+      "cvss_score": 10.0,
+      "affected_service": "Microsoft Windows Netlogon",
+      "description": "Zerologon elevation of privilege vulnerability",
+      "exploit_available": true
+    },
+    {
+      "cve_id": "CVE-2021-34527",
+      "severity": "high", 
+      "cvss_score": 8.8,
+      "affected_service": "Print Spooler Service",
+      "description": "PrintNightmare remote code execution vulnerability",
+      "exploit_available": true
+    }
+  ]
+}

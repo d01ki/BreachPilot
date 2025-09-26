@@ -1,0 +1,33 @@
+{
+  "target_ip": "192.168.1.100",
+  "status": "completed",
+  "open_ports": [
+    {
+      "port": 80,
+      "protocol": "TCP",
+      "service": "http",
+      "product": "Apache HTTP Server",
+      "version": "2.4.41"
+    },
+    {
+      "port": 445,
+      "protocol": "TCP", 
+      "service": "microsoft-ds",
+      "product": "Microsoft Windows Server 2019",
+      "version": "10.0"
+    }
+  ],
+  "services": [
+    {
+      "port": 80,
+      "name": "http",
+      "product": "Apache HTTP Server",
+      "version": "2.4.41"
+    },
+    {
+      "port": 445,
+      "name": "microsoft-ds",
+      "product": "Microsoft Windows Server 2019"
+    }
+  ]
+}

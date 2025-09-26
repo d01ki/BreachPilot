@@ -1,0 +1,20 @@
+{
+  "session_id": "97ad0b05-5bad-4c38-8587-0d66de83aac5",
+  "target_ip": "192.168.253.30",
+  "created_at": "2025-09-26 01:50:16.578581",
+  "current_step": "analysis",
+  "nmap_result": {
+    "timestamp": "2025-09-26 01:50:18.860379",
+    "target_ip": "192.168.253.30",
+    "open_ports": [],
+    "os_detection": null,
+    "services": [],
+    "vulnerabilities": [],
+    "raw_output": "Starting Nmap 7.94SVN ( https://nmap.org ) at 2025-09-26 01:50 JST\nNote: Host seems down. If it is really up, but blocking our ping probes, try -Pn\nNmap done: 1 IP address (0 hosts up) scanned in 12.78 seconds\n",
+    "status": "completed"
+  },
+  "analyst_result": null,
+  "poc_results": [],
+  "exploit_results": [],
+  "report_data": null
+}
