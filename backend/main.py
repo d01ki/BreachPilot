@@ -1,567 +1,361 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, Response
-from fastapi.staticfiles import StaticFiles
-from typing import List, Dict, Any
-import asyncio
-import json
+#!/usr/bin/env python3
+"""
+BreachPilot Professional Security Assessment Framework
+Main FastAPI Application - Updated for CrewAI Architecture
+"""
+
 import logging
-from pathlib import Path
-import os
-import glob
+import asyncio
 from datetime import datetime
-from backend.models import ScanRequest, PoCInfo
-from backend.orchestrator import ScanOrchestrator
+from typing import Dict, Any, List, Optional
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+
+from backend.models import (
+    ScanRequest, ScanResult, NmapResult, AnalystResult,
+    StepStatus
+)
 from backend.config import config
-import io
+from backend.orchestrator import SecurityOrchestrator
+from backend.crews import SecurityAssessmentCrew
 
-# Try to import PDF generation libraries
-try:
-    import weasyprint
-    PDF_LIBRARY = "weasyprint"
-except ImportError:
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib import colors
-        from reportlab.lib.units import inch
-        PDF_LIBRARY = "reportlab"
-    except ImportError:
-        PDF_LIBRARY = None
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="BreachPilot Professional API")
-
-# Enhanced CORS configuration for file downloads
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=["*"], 
-    allow_credentials=True, 
-    allow_methods=["*"], 
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"]
+# FastAPI app
+app = FastAPI(
+    title="BreachPilot Professional Security Assessment Framework",
+    description="Enterprise-grade security assessment powered by CrewAI multi-agent collaboration",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Ensure directories exist
-reports_dir = config.REPORTS_DIR
-reports_dir.mkdir(exist_ok=True)
-config.DATA_DIR.mkdir(exist_ok=True)
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Static files
-app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
-app.mount("/reports", StaticFiles(directory=str(reports_dir)), name="reports")
+# Initialize orchestrator
+try:
+    orchestrator = SecurityOrchestrator()
+    logger.info("SecurityOrchestrator initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize SecurityOrchestrator: {e}")
+    orchestrator = None
 
-logger.info(f"Reports directory: {reports_dir}")
-logger.info(f"Static reports directory mounted at /reports")
-logger.info(f"PDF Library available: {PDF_LIBRARY}")
+# Global scan sessions storage (in production, use proper database)
+scan_sessions: Dict[str, ScanResult] = {}
 
-# Serve frontend
-@app.get("/")
-async def serve_frontend():
-    return FileResponse("frontend/index.html")
+# Request/Response models
+class ScanStartRequest(BaseModel):
+    target: str
+    scan_type: str = "comprehensive"
+    enable_exploitation: bool = False
 
-orchestrator = ScanOrchestrator()
-active_connections: Dict[str, WebSocket] = {}
+class StatusResponse(BaseModel):
+    status: str
+    message: str
+    details: Dict[str, Any]
 
-@app.post("/api/scan/start")
-async def start_scan(request: ScanRequest):
-    try:
-        logger.info(f"Starting security assessment for target: {request.target_ip}")
-        session = orchestrator.start_scan(request)
-        logger.info(f"Security assessment session created: {session.session_id}")
-        return {"session_id": session.session_id, "target_ip": session.target_ip}
-    except Exception as e:
-        logger.error(f"Failed to start security assessment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/scan/{session_id}/nmap")
-async def run_nmap(session_id: str):
-    try:
-        result = orchestrator.run_nmap(session_id)
-        return result.model_dump()
-    except Exception as e:
-        logger.error(f"Network discovery failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/scan/{session_id}/analyze")
-async def run_analysis(session_id: str):
-    try:
-        result = orchestrator.run_analysis(session_id)
-        return result.model_dump()
-    except Exception as e:
-        logger.error(f"Vulnerability assessment failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/scan/{session_id}/poc")
-async def search_pocs(session_id: str, payload: Dict[str, Any] = Body(...)):
-    try:
-        selected_cves = payload.get('selected_cves', [])
-        limit = payload.get('limit', 4)
-        results = orchestrator.search_pocs_for_cves(session_id, selected_cves, limit=limit)
-        return [r.model_dump() for r in results]
-    except Exception as e:
-        logger.error(f"Exploit search failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/scan/{session_id}/exploit/by_index")
-async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Body(...)):
-    try:
-        cve_id = payload.get('cve_id')
-        poc_index = payload.get('poc_index')
-        target_ip = payload.get('target_ip')
-        
-        if not all([cve_id is not None, poc_index is not None, target_ip]):
-            raise HTTPException(status_code=400, detail="Missing required parameters")
-        
-        result = orchestrator.execute_poc_by_index(session_id, cve_id, poc_index, target_ip)
-        return result.model_dump()
-    except Exception as e:
-        logger.error(f"Exploit execution failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-def generate_html_report(target_ip, session_id, result):
-    """Generate HTML report content"""
-    html_content = f"""<!DOCTYPE html>
-<html><head>
-    <title>Security Assessment Report - {target_ip}</title>
-    <meta charset="UTF-8">
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-        .header {{ background: linear-gradient(135deg, #1f2937, #374151); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; }}
-        .header h1 {{ margin: 0; font-size: 2.5rem; }}
-        .header p {{ margin: 5px 0; opacity: 0.9; }}
-        .section {{ margin: 30px 0; padding: 20px; background: #f8fafc; border-left: 4px solid #3b82f6; border-radius: 8px; }}
-        .metric {{ display: inline-block; background: #e8f4fd; padding: 15px; margin: 10px; border-radius: 8px; min-width: 120px; text-align: center; }}
-        .metric-label {{ font-size: 0.9rem; color: #666; }}
-        .metric-value {{ font-size: 1.5rem; font-weight: bold; color: #1f2937; }}
-        .critical {{ background: #fef2f2; border-left-color: #dc2626; }}
-        .high {{ background: #fefbf2; border-left-color: #f59e0b; }}
-        .footer {{ margin-top: 50px; padding-top: 20px; border-top: 2px solid #e5e7eb; color: #666; font-size: 0.9rem; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
-        th {{ background-color: #f5f5f5; font-weight: bold; }}
-        .status-badge {{ padding: 4px 8px; border-radius: 4px; color: white; font-size: 0.8rem; }}
-        .status-critical {{ background: #dc2626; }}
-        .status-high {{ background: #f59e0b; }}
-        .status-medium {{ background: #10b981; }}
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🛡️ Security Assessment Report</h1>
-        <p><strong>Target:</strong> {target_ip}</p>
-        <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        <p><strong>Assessment Type:</strong> Professional Security Assessment</p>
-        <p><strong>Report ID:</strong> {session_id}</p>
-    </div>
-
-    <div class="section">
-        <h2>📊 Executive Summary</h2>
-        <p>This comprehensive security assessment was conducted using BreachPilot Professional Framework against the target system <strong>{target_ip}</strong>.</p>
-        
-        <div style="margin: 20px 0;">
-            <div class="metric">
-                <div class="metric-label">Services Discovered</div>
-                <div class="metric-value">{result.get('findings_count', 0)}</div>
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Serve the main application page"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>BreachPilot Professional - CrewAI Security Assessment</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .header { text-align: center; margin-bottom: 30px; }
+            .status { padding: 15px; margin: 10px 0; border-radius: 5px; }
+            .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+            .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+            .feature { margin: 15px 0; padding: 10px; background: #e7f3ff; border-radius: 5px; }
+            .api-links { margin-top: 20px; }
+            .api-links a { display: inline-block; margin: 5px 10px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+            .api-links a:hover { background: #0056b3; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🛡️ BreachPilot Professional</h1>
+                <h2>CrewAI Security Assessment Framework</h2>
+                <p><strong>Enterprise Edition v2.0</strong></p>
             </div>
-            <div class="metric">
-                <div class="metric-label">Critical Issues</div>
-                <div class="metric-value">{result.get('critical_issues', 0)}</div>
+            
+            <div class="feature">
+                <h3>🤖 CrewAI Multi-Agent System</h3>
+                <p>Professional security assessment using 5 specialized AI agents:</p>
+                <ul>
+                    <li><strong>Elite Vulnerability Hunter</strong> - CVE discovery specialist</li>
+                    <li><strong>CVE Research Specialist</strong> - Technical analysis expert</li>
+                    <li><strong>Senior Security Analyst</strong> - Business risk assessment</li>
+                    <li><strong>Professional Penetration Tester</strong> - Exploitation strategies</li>
+                    <li><strong>Professional Report Writer</strong> - Executive documentation</li>
+                </ul>
             </div>
-            <div class="metric">
-                <div class="metric-label">Exploits Verified</div>
-                <div class="metric-value">{result.get('successful_exploits', 0)}</div>
+            
+            <div class="feature">
+                <h3>🔍 Advanced CVE Detection</h3>
+                <p>Comprehensive vulnerability analysis including:</p>
+                <ul>
+                    <li>Zerologon (CVE-2020-1472) - Domain Controller compromise</li>
+                    <li>EternalBlue (CVE-2017-0144) - SMB remote code execution</li>
+                    <li>BlueKeep (CVE-2019-0708) - RDP vulnerability</li>
+                    <li>Log4Shell (CVE-2021-44228) - Java logging vulnerability</li>
+                    <li>PrintNightmare (CVE-2021-34527) - Windows Print Spooler</li>
+                </ul>
+            </div>
+            
+            <div class="api-links">
+                <h3>🚀 API Documentation</h3>
+                <a href="/docs" target="_blank">Interactive API Docs</a>
+                <a href="/redoc" target="_blank">ReDoc Documentation</a>
+                <a href="/status" target="_blank">System Status</a>
+                <a href="/health" target="_blank">Health Check</a>
+            </div>
+            
+            <div class="feature">
+                <h3>📖 Quick Start</h3>
+                <p><strong>API Endpoint:</strong> POST /scan/start</p>
+                <p><strong>Example Request:</strong></p>
+                <pre style="background: #f8f9fa; padding: 10px; border-radius: 5px;">{
+  "target": "192.168.1.100",
+  "scan_type": "comprehensive",
+  "enable_exploitation": false
+}</pre>
             </div>
         </div>
-    </div>
+    </body>
+    </html>
+    """
 
-    <div class="section critical">
-        <h2>⚠️ Security Recommendations</h2>
-        <table>
-            <tr><th>Priority</th><th>Recommendation</th><th>Timeline</th></tr>
-            <tr><td><span class="status-badge status-critical">CRITICAL</span></td><td>Apply security patches for all critical vulnerabilities</td><td>Immediate</td></tr>
-            <tr><td><span class="status-badge status-high">HIGH</span></td><td>Implement network access controls</td><td>1-2 weeks</td></tr>
-            <tr><td><span class="status-badge status-medium">MEDIUM</span></td><td>Enable advanced monitoring</td><td>2-4 weeks</td></tr>
-        </table>
-    </div>
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not available")
+    
+    health_status = await orchestrator.health_check()
+    
+    if health_status.get('overall') == 'healthy':
+        return JSONResponse(content=health_status)
+    else:
+        return JSONResponse(content=health_status, status_code=503)
 
-    <div class="footer">
-        <p><strong>Generated by:</strong> BreachPilot Professional Security Assessment Framework</p>
-        <p><strong>Report Validity:</strong> Valid for 30 days from generation date</p>
-    </div>
-</body></html>"""
-    return html_content
-
-def generate_pdf_with_weasyprint(html_content, target_ip):
-    """Generate PDF using WeasyPrint"""
-    try:
-        pdf_buffer = io.BytesIO()
-        weasyprint.HTML(string=html_content).write_pdf(pdf_buffer)
-        pdf_buffer.seek(0)
-        return pdf_buffer.getvalue()
-    except Exception as e:
-        logger.error(f"WeasyPrint PDF generation failed: {e}")
-        return None
-
-def generate_pdf_with_reportlab(target_ip, session_id, result):
-    """Generate PDF using ReportLab"""
-    try:
-        pdf_buffer = io.BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
-        styles = getSampleStyleSheet()
-        story = []
-        
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Title'],
-            fontSize=24,
-            spaceAfter=30,
-            textColor=colors.HexColor('#1f2937')
+@app.get("/status")
+async def get_status() -> StatusResponse:
+    """Get system status including CrewAI components"""
+    if not orchestrator:
+        return StatusResponse(
+            status="error",
+            message="Orchestrator not available",
+            details={}
         )
-        story.append(Paragraph("Security Assessment Report", title_style))
-        story.append(Spacer(1, 12))
-        
-        # Header Info
-        header_data = [
-            ['Target IP:', target_ip],
-            ['Generated:', datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
-            ['Assessment Type:', 'Professional Security Assessment'],
-            ['Report ID:', session_id]
-        ]
-        
-        header_table = Table(header_data, colWidths=[2*inch, 4*inch])
-        header_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ]))
-        
-        story.append(header_table)
-        story.append(Spacer(1, 20))
-        
-        # Executive Summary
-        story.append(Paragraph("Executive Summary", styles['Heading2']))
-        story.append(Paragraph(
-            f"This security assessment identified {result.get('findings_count', 0)} "
-            f"network services and {result.get('critical_issues', 0)} critical security issues.",
-            styles['Normal']
-        ))
-        story.append(Spacer(1, 20))
-        
-        # Recommendations
-        story.append(Paragraph("Security Recommendations", styles['Heading2']))
-        recommendations = [
-            "Apply security patches for all identified critical vulnerabilities",
-            "Implement comprehensive network segmentation and access controls",
-            "Enable advanced logging and security monitoring solutions",
-            "Conduct regular security assessments and penetration testing"
-        ]
-        
-        for i, rec in enumerate(recommendations, 1):
-            story.append(Paragraph(f"{i}. {rec}", styles['Normal']))
-        
-        doc.build(story)
-        pdf_buffer.seek(0)
-        return pdf_buffer.getvalue()
-        
-    except Exception as e:
-        logger.error(f"ReportLab PDF generation failed: {e}")
-        return None
-
-def find_report_file(target_ip, report_type):
-    """Find report file with multiple search patterns"""
-    search_patterns = [
-        f"{reports_dir}/*{target_ip}*.{report_type}",
-        f"{reports_dir}/security_report_{target_ip}_*.{report_type}",
-        f"{reports_dir}/enterprise_assessment_{target_ip}_*.{report_type}",
-        f"{reports_dir}/{target_ip}_report.{report_type}"
-    ]
     
-    for pattern in search_patterns:
-        files = glob.glob(pattern)
-        if files:
-            return max(files, key=os.path.getctime)
+    try:
+        status_details = orchestrator.get_orchestrator_status()
+        
+        # Add CrewAI specific status
+        if 'crewai' in status_details and 'crew_available' in status_details['crewai']:
+            crew_available = status_details['crewai']['crew_available']
+            status = "operational" if crew_available else "degraded"
+        else:
+            status = "unknown"
+        
+        return StatusResponse(
+            status=status,
+            message="System status retrieved successfully",
+            details=status_details
+        )
+        
+    except Exception as e:
+        logger.error(f"Status check failed: {e}")
+        return StatusResponse(
+            status="error",
+            message=f"Status check failed: {str(e)}",
+            details={}
+        )
+
+@app.post("/scan/start")
+async def start_scan(request: ScanStartRequest, background_tasks: BackgroundTasks):
+    """Start a comprehensive security assessment"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not available")
     
-    return None
-
-@app.post("/api/scan/{session_id}/report")
-async def generate_report(session_id: str):
-    """Generate comprehensive security assessment report with proper PDF"""
     try:
-        logger.info(f"Generating report for session: {session_id}")
+        # Create scan request
+        scan_request = ScanRequest(
+            target=request.target,
+            scan_type=request.scan_type,
+            enable_exploitation=request.enable_exploitation
+        )
         
-        session = orchestrator._get_session(session_id)
-        target_ip = session.target_ip
-        result = orchestrator.generate_report(session_id)
+        # Generate session ID
+        session_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{request.target.replace('.', '_')}"
         
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Initialize scan result
+        scan_result = ScanResult(
+            request=scan_request,
+            status=StepStatus.IN_PROGRESS,
+            errors=[]
+        )
         
-        # Generate HTML report
-        html_content = generate_html_report(target_ip, session_id, result)
-        html_path = reports_dir / f"security_report_{target_ip}_{timestamp}.html"
+        # Store in sessions
+        scan_sessions[session_id] = scan_result
         
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        logger.info(f"HTML report saved: {html_path}")
-        
-        # Generate PDF report
-        pdf_data = None
-        pdf_path = reports_dir / f"security_report_{target_ip}_{timestamp}.pdf"
-        
-        if PDF_LIBRARY == "weasyprint":
-            logger.info("Generating PDF with WeasyPrint")
-            pdf_data = generate_pdf_with_weasyprint(html_content, target_ip)
-        elif PDF_LIBRARY == "reportlab":
-            logger.info("Generating PDF with ReportLab")
-            pdf_data = generate_pdf_with_reportlab(target_ip, session_id, result)
-        
-        if pdf_data:
-            with open(pdf_path, 'wb') as f:
-                f.write(pdf_data)
-            logger.info(f"PDF report saved: {pdf_path} ({len(pdf_data)} bytes)")
-        else:
-            logger.warning("PDF generation failed, creating text fallback")
-            text_content = f"""SECURITY ASSESSMENT REPORT
-{'='*50}
-
-Target: {target_ip}
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Report Type: Professional Security Assessment
-Session ID: {session_id}
-
-EXECUTIVE SUMMARY
-{'-'*20}
-Services Discovered: {result.get('findings_count', 0)}
-Critical Issues: {result.get('critical_issues', 0)}
-Exploits Verified: {result.get('successful_exploits', 0)}
-
-RECOMMENDATIONS:
-1. Apply security patches for identified vulnerabilities
-2. Implement network segmentation
-3. Enable advanced monitoring
-4. Conduct regular security assessments
-
-Generated by BreachPilot Professional Security Assessment Framework
-"""
-            
-            with open(pdf_path, 'w', encoding='utf-8') as f:
-                f.write(text_content)
-        
-        result.update({
-            "html_path": str(html_path),
-            "pdf_path": str(pdf_path),
-            "html_download_url": f"/api/reports/download/html/{target_ip}",
-            "pdf_download_url": f"/api/reports/download/pdf/{target_ip}",
-            "report_generated": True,
-            "timestamp": timestamp
-        })
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Report generation failed for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/reports/download/{report_type}/{target_ip}")
-async def download_report_api(report_type: str, target_ip: str):
-    """Enhanced API endpoint for downloading reports"""
-    try:
-        logger.info(f"Download request: {report_type} report for {target_ip}")
-        
-        if report_type not in ['html', 'pdf', 'json', 'md']:
-            raise HTTPException(status_code=400, detail="File type must be html, pdf, json, or md")
-        
-        file_path = find_report_file(target_ip, report_type)
-        
-        if not file_path or not os.path.exists(file_path):
-            logger.error(f"No {report_type} file found for {target_ip}")
-            raise HTTPException(status_code=404, detail=f"No {report_type} report found for {target_ip}")
-        
-        media_types = {
-            'html': 'text/html',
-            'pdf': 'application/pdf',
-            'json': 'application/json',
-            'md': 'text/markdown'
-        }
-        media_type = media_types.get(report_type, 'application/octet-stream')
-        filename = f"security_assessment_{target_ip}.{report_type}"
-        file_size = os.path.getsize(file_path)
-        
-        logger.info(f"Serving {report_type.upper()} report: {file_path} ({file_size} bytes)")
-        
-        if report_type == 'pdf':
-            def generate_pdf_stream():
-                with open(file_path, 'rb') as f:
-                    while chunk := f.read(8192):
-                        yield chunk
-            
-            return StreamingResponse(
-                generate_pdf_stream(),
-                media_type=media_type,
-                headers={
-                    "Content-Disposition": f"attachment; filename={filename}",
-                    "Content-Length": str(file_size)
-                }
-            )
-        else:
-            return FileResponse(
-                path=file_path,
-                media_type=media_type,
-                filename=filename
-            )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Download failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/reports/list/{target_ip}")
-async def list_reports(target_ip: str):
-    """List all available reports for a target IP"""
-    try:
-        reports = []
-        for report_type in ['html', 'pdf', 'json', 'md']:
-            file_path = find_report_file(target_ip, report_type)
-            if file_path and os.path.exists(file_path):
-                file_stat = os.stat(file_path)
-                reports.append({
-                    "filename": os.path.basename(file_path),
-                    "type": report_type,
-                    "size": file_stat.st_size,
-                    "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                    "download_url": f"/api/reports/download/{report_type}/{target_ip}"
-                })
+        # Start background scan
+        background_tasks.add_task(run_security_assessment, session_id, scan_request)
         
         return {
-            "target_ip": target_ip,
-            "reports": reports,
-            "count": len(reports)
+            "session_id": session_id,
+            "status": "started",
+            "message": "Security assessment started",
+            "target": request.target,
+            "scan_type": request.scan_type
         }
         
     except Exception as e:
-        logger.error(f"Failed to list reports for {target_ip}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to start scan: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
-@app.get("/api/reports/test/{target_ip}")
-async def create_test_reports(target_ip: str):
-    """Create test report files for immediate testing"""
-    try:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        test_result = {
-            'findings_count': 5,
-            'critical_issues': 2,
-            'successful_exploits': 1,
-            'executive_summary': 'Test security assessment completed.'
+@app.get("/scan/{session_id}/status")
+async def get_scan_status(session_id: str):
+    """Get status of a running scan"""
+    if session_id not in scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    
+    scan_result = scan_sessions[session_id]
+    
+    return {
+        "session_id": session_id,
+        "status": scan_result.status.value,
+        "target": scan_result.request.target,
+        "execution_time": scan_result.execution_time,
+        "errors": scan_result.errors,
+        "completed_steps": {
+            "nmap": scan_result.nmap_result is not None,
+            "analysis": scan_result.analyst_result is not None,
+            "exploitation": scan_result.exploit_result is not None,
+            "report": scan_result.report_result is not None
         }
+    }
+
+@app.get("/scan/{session_id}/results")
+async def get_scan_results(session_id: str):
+    """Get complete scan results"""
+    if session_id not in scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    
+    scan_result = scan_sessions[session_id]
+    
+    if scan_result.status not in [StepStatus.COMPLETED, StepStatus.FAILED]:
+        raise HTTPException(status_code=202, detail="Scan still in progress")
+    
+    # Convert to dict for JSON serialization
+    result_dict = {
+        "session_id": session_id,
+        "status": scan_result.status.value,
+        "execution_time": scan_result.execution_time,
+        "target": scan_result.request.target,
+        "scan_type": scan_result.request.scan_type,
+        "errors": scan_result.errors
+    }
+    
+    # Add results if available
+    if scan_result.nmap_result:
+        result_dict["nmap_results"] = {
+            "target_ip": scan_result.nmap_result.target_ip,
+            "services_count": len(scan_result.nmap_result.services or []),
+            "os_detection": scan_result.nmap_result.os_detection
+        }
+    
+    if scan_result.analyst_result:
+        result_dict["vulnerability_analysis"] = {
+            "cves_identified": len(scan_result.analyst_result.identified_cves),
+            "priority_vulnerabilities": len(scan_result.analyst_result.priority_vulnerabilities),
+            "risk_assessment": scan_result.analyst_result.risk_assessment[:500] + "..." if len(scan_result.analyst_result.risk_assessment) > 500 else scan_result.analyst_result.risk_assessment,
+            "cves": [{
+                "cve_id": cve.cve_id,
+                "severity": cve.severity,
+                "cvss_score": cve.cvss_score,
+                "description": cve.description[:200] + "..." if len(cve.description) > 200 else cve.description
+            } for cve in scan_result.analyst_result.identified_cves]
+        }
+    
+    return result_dict
+
+async def run_security_assessment(session_id: str, scan_request: ScanRequest):
+    """Background task to run security assessment"""
+    try:
+        logger.info(f"Starting background security assessment for session {session_id}")
         
-        created_files = []
+        # Execute assessment
+        result = await orchestrator.execute_security_assessment(scan_request)
         
-        # Create HTML report
-        html_content = generate_html_report(target_ip, f"test-{timestamp}", test_result)
-        html_path = reports_dir / f"security_report_{target_ip}_{timestamp}.html"
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        created_files.append({"type": "html", "path": str(html_path)})
+        # Update session
+        scan_sessions[session_id] = result
         
-        # Create PDF report
-        pdf_path = reports_dir / f"security_report_{target_ip}_{timestamp}.pdf"
+        logger.info(f"Security assessment completed for session {session_id}")
         
-        if PDF_LIBRARY == "weasyprint":
-            pdf_data = generate_pdf_with_weasyprint(html_content, target_ip)
-        elif PDF_LIBRARY == "reportlab":
-            pdf_data = generate_pdf_with_reportlab(target_ip, f"test-{timestamp}", test_result)
-        else:
-            pdf_data = None
+    except Exception as e:
+        logger.error(f"Security assessment failed for session {session_id}: {e}")
         
-        if pdf_data:
-            with open(pdf_path, 'wb') as f:
-                f.write(pdf_data)
-        else:
-            with open(pdf_path, 'w', encoding='utf-8') as f:
-                f.write(f"TEST PDF REPORT\nTarget: {target_ip}\nGenerated: {datetime.now()}")
-        
-        created_files.append({"type": "pdf", "path": str(pdf_path)})
-        
-        logger.info(f"Test reports created for {target_ip}: {created_files}")
+        # Update session with error
+        if session_id in scan_sessions:
+            scan_sessions[session_id].status = StepStatus.FAILED
+            scan_sessions[session_id].errors.append(str(e))
+
+@app.get("/crewai/status")
+async def get_crewai_status():
+    """Get CrewAI specific status information"""
+    try:
+        crew = SecurityAssessmentCrew()
+        status = crew.get_crew_status()
+        validation = crew.validate_configuration()
         
         return {
-            "message": "Test reports created successfully",
-            "target_ip": target_ip,
-            "files": created_files,
-            "html_url": f"/api/reports/download/html/{target_ip}",
-            "pdf_url": f"/api/reports/download/pdf/{target_ip}"
+            "crewai_version": "2.0.0",
+            "status": status,
+            "validation": validation,
+            "agents_available": list(crew.agents.keys()) if crew.crew_available else [],
+            "tasks_available": list(crew.tasks_config.keys()) if hasattr(crew, 'tasks_config') else []
         }
         
     except Exception as e:
-        logger.error(f"Failed to create test reports: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Legacy endpoints for backward compatibility
-@app.get("/download/{file_type}/{target_ip}")
-async def download_file_legacy(file_type: str, target_ip: str):
-    """Legacy download endpoint - redirects to new API"""
-    return await download_report_api(file_type, target_ip)
-
-@app.get("/test/create/{target_ip}")
-async def create_test_files_legacy(target_ip: str):
-    """Legacy test creation endpoint"""
-    return await create_test_reports(target_ip)
-
-@app.get("/api/scan/{session_id}/status")
-async def get_status(session_id: str):
-    try:
-        status = orchestrator.get_session_status(session_id)
-        return status
-    except Exception as e:
-        logger.error(f"Failed to get status for session {session_id}: {e}")
-        raise HTTPException(status_code=404, detail="Session not found")
-
-@app.get("/api/scan/{session_id}/results")
-async def get_results(session_id: str):
-    try:
-        session = orchestrator._get_session(session_id)
-        
-        response = {
-            "nmap_result": session.nmap_result.model_dump() if session.nmap_result else None,
-            "analyst_result": session.analyst_result.model_dump() if session.analyst_result else None,
-            "poc_results": [p.model_dump() for p in session.poc_results] if session.poc_results else [],
-            "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else [],
-            "report_data": session.report_data if session.report_data else None
+        logger.error(f"CrewAI status check failed: {e}")
+        return {
+            "error": str(e),
+            "crewai_available": False
         }
-        
-        return response
-    except Exception as e:
-        logger.error(f"Failed to get results for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    await websocket.accept()
-    active_connections[session_id] = websocket
-    try:
-        while True:
-            await asyncio.sleep(2)
-            try:
-                status = orchestrator.get_session_status(session_id)
-                await websocket.send_json(status)
-            except:
-                break
-    except WebSocketDisconnect:
-        pass
-    finally:
-        if session_id in active_connections:
-            del active_connections[session_id]
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"Starting server with reports directory: {reports_dir}")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    logger.info("Starting BreachPilot Professional Security Assessment Framework")
+    logger.info("CrewAI Architecture - Enterprise Edition v2.0")
+    
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=config.DEBUG,
+        log_level=config.LOG_LEVEL.lower()
+    )
