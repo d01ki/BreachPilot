@@ -90,13 +90,13 @@ createApp({
         getServiceInfo(nmapResult) {
             if (!nmapResult || !nmapResult.raw_output) return null;
             
-            const match = nmapResult.raw_output.match(/Service Info:\s*(.+?)(?:\n|$)/);
+            const match = nmapResult.raw_output.match(/Service Info:\\s*(.+?)(?:\\n|$)/);
             if (match) {
                 const serviceInfo = match[1].trim();
                 return serviceInfo
-                    .replace(/Host:\s*([^;]+)/g, '<strong>Host:</strong> $1')
-                    .replace(/OS:\s*([^;]+)/g, '<strong>Operating System:</strong> $1')
-                    .replace(/CPE:\s*([^;]+)/g, '<strong>Common Platform Enumeration:</strong> <code class="text-xs">$1</code>');
+                    .replace(/Host:\\s*([^;]+)/g, '<strong>Host:</strong> $1')
+                    .replace(/OS:\\s*([^;]+)/g, '<strong>Operating System:</strong> $1')
+                    .replace(/CPE:\\s*([^;]+)/g, '<strong>Common Platform Enumeration:</strong> <code class="text-xs">$1</code>');
             }
             return null;
         },
@@ -107,7 +107,7 @@ createApp({
             }
             
             if (nmapResult?.raw_output) {
-                const match = nmapResult.raw_output.match(/OS:\s*([^;,\n]+)/);
+                const match = nmapResult.raw_output.match(/OS:\\s*([^;,\\n]+)/);
                 if (match) {
                     return match[1].trim();
                 }
@@ -163,12 +163,12 @@ createApp({
             if (!details) return '';
             
             let formatted = details
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+                .replace(/\\*(.*?)\\*/g, '<em>$1</em>')
                 .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded text-xs">$1</code>')
-                .replace(/\n\n/g, '</p><p class="mt-3">')
-                .replace(/\n-\s/g, '<br>• ')
-                .replace(/\n/g, '<br>');
+                .replace(/\\n\\n/g, '</p><p class="mt-3">')
+                .replace(/\\n-\\s/g, '<br>• ')
+                .replace(/\\n/g, '<br>');
             
             return `<p class="leading-relaxed">${formatted}</p>`;
         },
@@ -290,29 +290,129 @@ createApp({
             }
         },
         
-        // FIXED: Simple and reliable download methods
-        viewReport() {
+        // Enhanced download methods with proper error handling and fallbacks
+        async viewReport() {
             if (!this.targetIp) {
                 alert('Target IP not available');
                 return;
             }
             
-            const reportUrl = `/download/html/${this.targetIp}`;
-            console.log('Opening HTML report:', reportUrl);
-            window.open(reportUrl, '_blank');
+            try {
+                // First check if reports are available
+                const listResponse = await axios.get(`/api/reports/list/${this.targetIp}`);
+                const availableReports = listResponse.data.reports;
+                
+                const htmlReport = availableReports.find(r => r.type === 'html');
+                if (htmlReport) {
+                    const reportUrl = htmlReport.download_url;
+                    console.log('Opening HTML report:', reportUrl);
+                    window.open(reportUrl, '_blank');
+                } else {
+                    alert('HTML report not found. Please generate a report first.');
+                }
+            } catch (error) {
+                console.error('Error checking reports:', error);
+                // Fallback to direct URL
+                const reportUrl = `/api/reports/download/html/${this.targetIp}`;
+                console.log('Fallback: Opening HTML report:', reportUrl);
+                window.open(reportUrl, '_blank');
+            }
         },
         
-        downloadReport() {
+        async downloadReport() {
             if (!this.targetIp) {
                 alert('Target IP not available');
                 return;
             }
             
-            const pdfUrl = `/download/pdf/${this.targetIp}`;
-            console.log('Downloading PDF from:', pdfUrl);
-            
-            // Simple direct download
-            window.location.href = pdfUrl;
+            try {
+                console.log('Starting PDF download for:', this.targetIp);
+                
+                // First check if PDF report is available
+                const listResponse = await axios.get(`/api/reports/list/${this.targetIp}`);
+                const availableReports = listResponse.data.reports;
+                console.log('Available reports:', availableReports);
+                
+                const pdfReport = availableReports.find(r => r.type === 'pdf');
+                if (!pdfReport) {
+                    // Try to find any report and suggest alternatives
+                    if (availableReports.length > 0) {
+                        const alternatives = availableReports.map(r => r.type).join(', ');
+                        alert(`PDF report not found. Available formats: ${alternatives}. Please generate a report first or try a different format.`);
+                    } else {
+                        alert('No reports found. Please generate a report first.');
+                    }
+                    return;
+                }
+                
+                const pdfUrl = pdfReport.download_url;
+                console.log('PDF download URL:', pdfUrl);
+                
+                // Use the robust download method
+                await this.downloadReportWithFetch(pdfUrl, `security_assessment_${this.targetIp}.pdf`);
+                
+            } catch (error) {
+                console.error('Error in downloadReport:', error);
+                
+                // Fallback to direct download attempt
+                console.log('Attempting fallback PDF download');
+                const fallbackUrl = `/api/reports/download/pdf/${this.targetIp}`;
+                
+                try {
+                    await this.downloadReportWithFetch(fallbackUrl, `security_assessment_${this.targetIp}.pdf`);
+                } catch (fallbackError) {
+                    console.error('Fallback download also failed:', fallbackError);
+                    alert('PDF download failed. Please ensure a report has been generated and try again.');
+                }
+            }
+        },
+        
+        async downloadReportWithFetch(url, filename) {
+            try {
+                console.log('Downloading from URL:', url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/pdf'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                console.log('Response content type:', contentType);
+                
+                // Get the file as a blob
+                const blob = await response.blob();
+                console.log('Downloaded blob size:', blob.size, 'bytes');
+                
+                if (blob.size === 0) {
+                    throw new Error('Downloaded file is empty');
+                }
+                
+                // Create download link
+                const url_object = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url_object;
+                link.download = filename;
+                
+                // Trigger download
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up
+                window.URL.revokeObjectURL(url_object);
+                
+                console.log('PDF download completed successfully');
+                
+            } catch (error) {
+                console.error('Download with fetch failed:', error);
+                throw error;
+            }
         },
         
         // Test method to create files for immediate testing
@@ -323,7 +423,8 @@ createApp({
             }
             
             try {
-                const response = await axios.get(`/test/create/${this.targetIp}`);
+                console.log('Creating test files for:', this.targetIp);
+                const response = await axios.get(`/api/reports/test/${this.targetIp}`);
                 console.log('Test files created:', response.data);
                 alert('Test files created successfully! You can now test the download buttons.');
                 
@@ -331,12 +432,13 @@ createApp({
                 this.reportResult = {
                     message: "Test report generated",
                     html_download_url: response.data.html_url,
-                    pdf_download_url: response.data.pdf_url
+                    pdf_download_url: response.data.pdf_url,
+                    report_generated: true
                 };
                 
             } catch (error) {
                 console.error('Error creating test files:', error);
-                alert('Failed to create test files: ' + error.message);
+                alert('Failed to create test files: ' + (error.response?.data?.detail || error.message));
             }
         },
         
@@ -466,8 +568,11 @@ createApp({
     
     mounted() {
         console.log('BreachPilot Professional Security Assessment Framework loaded');
-        console.log('PDF download endpoint: /download/pdf/{target_ip}');
-        console.log('HTML report endpoint: /download/html/{target_ip}');
-        console.log('Test file creation: /test/create/{target_ip}');
+        console.log('Enhanced PDF download system active');
+        console.log('Available endpoints:');
+        console.log('  - PDF download: /api/reports/download/pdf/{target_ip}');
+        console.log('  - HTML report: /api/reports/download/html/{target_ip}');
+        console.log('  - List reports: /api/reports/list/{target_ip}');
+        console.log('  - Test creation: /api/reports/test/{target_ip}');
     }
 }).mount('#app');
