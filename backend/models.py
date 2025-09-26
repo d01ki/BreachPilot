@@ -6,22 +6,28 @@ from enum import Enum
 class StepStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
     APPROVED = "approved"
     REJECTED = "rejected"
 
 class ScanRequest(BaseModel):
-    target_ip: str = Field(..., description="Target IP address")
+    target: str = Field(..., description="Target IP address or hostname")
+    target_ip: Optional[str] = Field(None, description="Target IP address (legacy)")
+    scan_type: str = Field(default="comprehensive", description="Type of scan to perform")
+    port_range: Optional[str] = Field(default=None, description="Port range to scan")
     scan_options: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    enable_exploitation: bool = Field(default=False, description="Enable exploitation phase")
 
 class NmapResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     target_ip: str
     open_ports: List[Dict[str, Any]] = Field(default_factory=list)
-    os_detection: Optional[Dict[str, Any]] = None
+    os_detection: Optional[str] = None  # Changed to string for compatibility
     services: List[Dict[str, Any]] = Field(default_factory=list)
     vulnerabilities: List[Dict[str, Any]] = Field(default_factory=list)
+    scan_time: Optional[str] = None
     raw_output: str = ""
     status: StepStatus = StepStatus.PENDING
 
@@ -70,15 +76,29 @@ class PoCResult(BaseModel):
     with_code: int = 0
     search_duration: Optional[float] = None
 
+class ExploitChain(BaseModel):
+    """Exploitation chain information"""
+    cve_ids: List[str] = Field(default_factory=list)
+    steps: List[str] = Field(default_factory=list)
+    success_probability: float = 0.0
+    estimated_time: str = ""
+    required_tools: List[str] = Field(default_factory=list)
+
 class ExploitResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
-    cve_id: str
     target_ip: str = ""
+    exploit_chains: List[ExploitChain] = Field(default_factory=list)
+    tested_exploits: List[Dict[str, Any]] = Field(default_factory=list)
+    successful_exploits: List[str] = Field(default_factory=list)
+    failed_exploits: List[str] = Field(default_factory=list)
+    status: StepStatus = StepStatus.PENDING
+    
+    # Legacy compatibility fields
+    cve_id: Optional[str] = None
     exploit_used: str = ""
     execution_output: str = ""
     success: bool = False
     artifacts_captured: List[str] = Field(default_factory=list)
-    status: StepStatus = StepStatus.PENDING
     poc_index: Optional[int] = None
     poc_source: Optional[str] = None
     poc_url: Optional[str] = None
@@ -90,10 +110,34 @@ class ExploitResult(BaseModel):
     return_code: Optional[int] = None
     evidence: List[str] = Field(default_factory=list)
     environment_info: Optional[Dict[str, Any]] = Field(default_factory=dict)
-    
-    # Added fields for compatibility
     vulnerability_confirmed: bool = False
     exploit_successful: bool = False
+
+class ReportResult(BaseModel):
+    """Report generation result"""
+    timestamp: datetime = Field(default_factory=datetime.now)
+    report_path: Optional[str] = None
+    pdf_path: Optional[str] = None
+    html_path: Optional[str] = None
+    executive_summary: str = ""
+    technical_findings: str = ""
+    recommendations: str = ""
+    status: StepStatus = StepStatus.PENDING
+    generation_time: Optional[float] = None
+    errors: List[str] = Field(default_factory=list)
+
+class ScanResult(BaseModel):
+    """Complete security assessment scan result"""
+    request: ScanRequest
+    nmap_result: Optional[NmapResult] = None
+    analyst_result: Optional[AnalystResult] = None
+    exploit_result: Optional[ExploitResult] = None
+    report_result: Optional[ReportResult] = None
+    execution_time: float = 0.0
+    status: StepStatus = StepStatus.PENDING
+    errors: List[str] = Field(default_factory=list)
+    started_at: datetime = Field(default_factory=datetime.now)
+    completed_at: Optional[datetime] = None
 
 class ReportData(BaseModel):
     """Professional security assessment report data"""

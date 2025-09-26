@@ -1,0 +1,272 @@
+# BreachPilot Professional Security Assessment CrewAI Tasks
+# Based on CrewAI official documentation: https://docs.crewai.com/
+
+vulnerability_discovery:
+  description: >
+    CRITICAL MISSION: Conduct comprehensive vulnerability hunting on target system {target_ip}
+    
+    TARGET INTELLIGENCE:
+    - Target IP: {target_ip}
+    - Open Ports: {open_ports}
+    - Operating System: {os_info}
+    - Detected Services: {services}
+    - Domain Controller Indicators: {dc_indicators}
+    - SMB Services: {smb_services}
+    - RDP Services: {rdp_services}
+    - Web Services: {web_services}
+    - Database Services: {database_services}
+    
+    SPECIFIC HUNTING PRIORITIES:
+    1. **ZEROLOGON DETECTION**: If SMB/DC services detected, MUST analyze for CVE-2020-1472 (Zerologon)
+    2. **ETERNALBLUE ANALYSIS**: For SMB services, evaluate CVE-2017-0144 susceptibility
+    3. **BLUEKEEP ASSESSMENT**: For RDP services, check CVE-2019-0708 vulnerability
+    4. **VERSION-BASED MAPPING**: Match exact service versions to known CVE database
+    5. **CONFIGURATION ANALYSIS**: Identify security misconfigurations and weak settings
+    6. **PROTOCOL VULNERABILITIES**: Analyze network protocol implementations
+    7. **AUTHENTICATION BYPASSES**: Look for authentication weakness patterns
+    8. **PRINTNIGHTMARE CHECK**: For Windows systems, analyze CVE-2021-34527
+    9. **LOG4SHELL DETECTION**: For Java web applications, check CVE-2021-44228
+    10. **SMBGHOST ANALYSIS**: For SMBv3 services, evaluate CVE-2020-0796
+    
+    EVIDENCE REQUIREMENTS:
+    - Provide EXACT technical reasoning for each identified CVE
+    - Explain WHY the specific service version/configuration is vulnerable
+    - Include CVSS v3.1 scores and severity classifications
+    - Specify affected service components and attack vectors
+    - Document version ranges and affected platforms
+    - Reference official CVE databases and security advisories
+    
+    MANDATORY OUTPUT: Identify exactly 5-7 specific CVE vulnerabilities with complete 
+    technical evidence and version-to-vulnerability mappings. Focus on exploitable 
+    vulnerabilities with high business impact.
+  
+  expected_output: >
+    Comprehensive vulnerability assessment report containing:
+    1. Executive Summary with key findings
+    2. Detailed list of 5-7 specific CVE vulnerabilities with:
+       - CVE ID and CVSS score
+       - Technical description and affected components
+       - Exploitation requirements and attack vectors
+       - Version-specific evidence and proof
+    3. Risk prioritization matrix
+    4. Immediate action items for critical vulnerabilities
+  
+  agent: vulnerability_hunter
+  tools: []
+
+cve_research:
+  description: >
+    RESEARCH MISSION: Validate and provide comprehensive technical analysis for discovered vulnerabilities
+    
+    Based on the vulnerability hunter's findings, conduct deep research covering:
+    
+    1. **TECHNICAL VALIDATION**: Confirm each CVE affects the identified services and versions
+    2. **EXPLOITATION MECHANICS**: Detailed explanation of how each vulnerability can be exploited
+    3. **ATTACK VECTORS**: Document all possible attack paths and prerequisites
+    4. **PROOF OF CONCEPT**: Research existing POCs and describe exploitation steps
+    5. **BUSINESS IMPACT**: Assess real-world impact for enterprise environments
+    6. **EVIDENCE DOCUMENTATION**: Provide concrete technical proof for each CVE
+    7. **REMEDIATION ANALYSIS**: Specific patches, mitigations, and compensating controls
+    8. **THREAT INTELLIGENCE**: Current exploitation in the wild and threat actor usage
+    
+    SPECIAL FOCUS AREAS:
+    - Windows Domain Controller vulnerabilities (Zerologon, DCShadow, Golden Ticket)
+    - Network protocol vulnerabilities (SMB, RDP, Kerberos, LDAP)
+    - Service-specific vulnerabilities based on version fingerprinting
+    - Authentication and authorization bypass vulnerabilities
+    - Remote code execution and privilege escalation vulnerabilities
+    - Zero-day potential and exploit availability in underground markets
+    
+    QUALITY STANDARDS:
+    - Each CVE must have solid technical justification with version evidence
+    - Include specific affected version ranges and platforms
+    - Provide CVSS v3.1 base scores and temporal/environmental adjustments
+    - Document exploitation complexity and required skill levels
+    - Reference public exploits, POCs, and current threat intelligence
+    - Include timeline of vulnerability disclosure and patching
+  
+  expected_output: >
+    Comprehensive CVE research report containing:
+    1. Technical validation summary for each vulnerability
+    2. Detailed exploitation analysis including:
+       - Step-by-step attack methodology
+       - Required tools and prerequisites
+       - Success probability assessment
+       - Detection and prevention mechanisms
+    3. Business impact assessment with financial risk quantification
+    4. Detailed remediation guidance with implementation timelines
+    5. Threat landscape analysis and current exploitation trends
+  
+  agent: cve_researcher
+  context: [vulnerability_discovery]
+  tools: []
+
+pen_test_strategy:
+  description: >
+    EXPLOITATION MISSION: Develop detailed penetration testing strategy and proof-of-concept approaches
+    
+    Based on identified vulnerabilities, create comprehensive exploitation strategy including:
+    
+    1. **ATTACK CHAIN DEVELOPMENT**: Map potential attack sequences and vulnerability chaining
+    2. **EXPLOITATION ROADMAP**: Detailed steps for exploiting each vulnerability safely
+    3. **PROOF OF CONCEPT**: Technical approach for demonstrating impact without damage
+    4. **PRIVILEGE ESCALATION**: Paths from initial access to domain/system administrator
+    5. **LATERAL MOVEMENT**: Techniques for expanding access across the network
+    6. **PERSISTENCE MECHANISMS**: Methods for maintaining long-term access (theoretical)
+    7. **IMPACT DEMONSTRATION**: Concrete examples of business impact scenarios
+    8. **DEFENSE EVASION**: Techniques to bypass common security controls
+    
+    TACTICAL FOCUS:
+    - Zerologon to Domain Admin pathway (if applicable)
+    - SMB exploitation and file system access demonstration
+    - RDP compromise and interactive access scenarios
+    - Web application exploitation vectors and data access
+    - Database compromise and data exfiltration potential
+    - Credential harvesting and password attack strategies
+    - Network segmentation bypass techniques
+    
+    ETHICAL BOUNDARIES:
+    - All strategies must be for authorized testing only
+    - Focus on proof-of-concept rather than actual exploitation
+    - Emphasize detection and prevention recommendations
+    - Provide defensive strategies alongside offensive techniques
+    - Include risk mitigation during testing procedures
+    
+    DELIVERABLES:
+    - Detailed penetration testing methodology
+    - Risk-assessed exploitation scenarios
+    - Timeline and resource requirements
+    - Safety procedures and rollback plans
+  
+  expected_output: >
+    Professional penetration testing strategy document containing:
+    1. Executive summary of testing approach and objectives
+    2. Detailed exploitation scenarios for each vulnerability including:
+       - Step-by-step methodology
+       - Required tools and resources
+       - Success criteria and validation methods
+       - Risk mitigation procedures
+    3. Attack chain analysis with privilege escalation paths
+    4. Impact demonstration plans with business context
+    5. Testing timeline and resource allocation
+    6. Safety procedures and emergency response plans
+  
+  agent: penetration_tester
+  context: [vulnerability_discovery, cve_research]
+  tools: []
+
+security_analysis:
+  description: >
+    ANALYSIS MISSION: Synthesize all findings into executive-level security intelligence
+    
+    Create comprehensive security assessment incorporating:
+    
+    1. **RISK PRIORITIZATION**: Rank vulnerabilities by exploitability, impact, and business context
+    2. **THREAT MODELING**: Map identified vulnerabilities to current threat actor TTPs
+    3. **BUSINESS IMPACT**: Translate technical risks into financial and operational impact
+    4. **ATTACK SCENARIOS**: Develop realistic attack scenarios based on identified vulnerabilities
+    5. **REMEDIATION STRATEGY**: Prioritized action plan with timeline and resource requirements
+    6. **COMPENSATING CONTROLS**: Temporary mitigations while patches are deployed
+    7. **STRATEGIC RECOMMENDATIONS**: Long-term security improvements and investments
+    8. **COMPLIANCE IMPACT**: Regulatory and compliance implications of findings
+    
+    EXECUTIVE FOCUS:
+    - Immediate threats requiring urgent attention (0-24 hours)
+    - Short-term remediation priorities (1-7 days)
+    - Medium-term security improvements (1-4 weeks)
+    - Long-term strategic security investments (1-12 months)
+    - Budget requirements and ROI justification
+    - Insurance and liability considerations
+    - Board-level communication requirements
+    
+    DELIVERABLE STANDARDS:
+    - Executive summary suitable for C-level presentation
+    - Technical details for IT and security teams
+    - Business justification for security investments
+    - Clear metrics and success criteria
+    - Risk acceptance vs. mitigation decision frameworks
+    - Compliance and regulatory impact assessment
+  
+  expected_output: >
+    Executive-level security analysis containing:
+    1. Executive Summary with key business risks and recommendations
+    2. Risk prioritization matrix with business impact assessment
+    3. Comprehensive remediation roadmap with:
+       - Immediate actions (0-24 hours)
+       - Short-term priorities (1-7 days)
+       - Medium-term improvements (1-4 weeks)
+       - Long-term strategic initiatives (1-12 months)
+    4. Financial impact analysis and budget recommendations
+    5. Compliance and regulatory considerations
+    6. Strategic security recommendations for board presentation
+  
+  agent: security_analyst
+  context: [vulnerability_discovery, cve_research, pen_test_strategy]
+  tools: []
+
+final_report:
+  description: >
+    REPORTING MISSION: Create comprehensive professional security assessment report
+    
+    Synthesize all previous analysis into a polished, professional security assessment report that includes:
+    
+    **EXECUTIVE SECTION:**
+    - Executive Summary with key findings and business impact
+    - Risk Overview with severity breakdown and prioritization
+    - Strategic Recommendations with budget and timeline implications
+    - Regulatory and Compliance Considerations
+    - Board-level talking points and decision requirements
+    
+    **TECHNICAL SECTION:**
+    - Detailed Vulnerability Analysis with CVE mappings
+    - Technical Evidence and Proof of Concept summaries
+    - Exploitation Scenarios and Attack Chain Analysis
+    - Remediation Technical Details with implementation guidance
+    - Network diagram annotations and service analysis
+    
+    **IMPLEMENTATION SECTION:**
+    - Prioritized Action Plan with timelines
+    - Resource Requirements and Budget Estimates
+    - Implementation Roadmap with dependencies
+    - Success Metrics and Validation Procedures
+    - Risk Monitoring and Continuous Assessment Plan
+    
+    **APPENDICES:**
+    - Complete CVE database with CVSS scores and references
+    - Technical scan results and evidence artifacts
+    - Remediation checklist and verification procedures
+    - Additional resources and reference materials
+    - Glossary of technical terms for business stakeholders
+    
+    FORMATTING REQUIREMENTS:
+    - Professional business document format
+    - Clear section headers and executive navigation
+    - Executive-friendly summary sections with minimal jargon
+    - Technical depth for implementation teams
+    - Actionable recommendations with clear ownership
+    - Risk matrix and vulnerability prioritization charts
+    - Compliance mapping and regulatory considerations
+    
+    TARGET AUDIENCE:
+    - C-level executives and board members
+    - IT directors and security managers
+    - Technical implementation teams
+    - Compliance and audit functions
+    - Legal and risk management teams
+  
+  expected_output: >
+    Professional security assessment report with:
+    1. Executive Summary (2-3 pages) suitable for board presentation
+    2. Technical Findings Section (10-15 pages) with detailed vulnerability analysis
+    3. Remediation Roadmap (3-5 pages) with prioritized action items
+    4. Business Impact Analysis (2-3 pages) with financial risk quantification
+    5. Implementation Guide (5-7 pages) with technical procedures
+    6. Compliance Assessment (1-2 pages) with regulatory implications
+    7. Appendices with supporting technical documentation
+    
+    Total report length: 25-35 pages of professional security documentation
+    suitable for enterprise stakeholders at all levels.
+  
+  agent: report_writer
+  context: [vulnerability_discovery, cve_research, pen_test_strategy, security_analysis]
+  tools: []
