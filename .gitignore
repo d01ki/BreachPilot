@@ -1,13 +1,64 @@
+# Python
 __pycache__/
-*.pyc
-.env
-venv/
-.venv/
-env/
-.DS_Store
-logs/
-reports/
-*.log
-node_modules/
-*.pdf
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Data
+data/output/
+reports/
+*.pdf
+*.json
+*.csv
+
+# Temporary
+tmp/
+temp/
+
+# Remove old docs
+QUICKSTART.md
+SETUP_INSTRUCTIONS.md
+FINAL_CLEANUP_REPORT.md
+MANUAL_CLEANUP_INSTRUCTIONS.md
+cleanup_legacy_files.py
