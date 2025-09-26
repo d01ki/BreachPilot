@@ -1,32 +1,82 @@
+#!/usr/bin/env python3
+"""
+BreachPilot Configuration Management
+Updated for CrewAI Professional Implementation
+"""
+
 import os
-from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
 class Config:
-    # API Keys
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
-    # GitHub Token is not required - GitHub API works without authentication
+    """
+    Application configuration class
+    """
     
-    # Paths
-    BASE_DIR = Path(__file__).parent.parent
-    DATA_DIR = BASE_DIR / "data"
-    REPORTS_DIR = BASE_DIR / "reports"
-    TOOLS_DIR = BASE_DIR / "tools"
+    # OpenAI Configuration (Required for CrewAI)
+    OPENAI_API_KEY: Optional[str] = os.getenv('OPENAI_API_KEY')
     
-    # Create directories if they don't exist
-    DATA_DIR.mkdir(exist_ok=True)
-    REPORTS_DIR.mkdir(exist_ok=True)
-    TOOLS_DIR.mkdir(exist_ok=True)
+    # Serper API Key for Web Search (Optional)
+    SERPER_API_KEY: Optional[str] = os.getenv('SERPER_API_KEY')
     
-    # Tool paths
-    NMAP_CMD = "nmap"
-    METASPLOIT_PATH = "/usr/share/metasploit-framework"
+    # LLM Configuration
+    LLM_MODEL: str = os.getenv('LLM_MODEL', 'gpt-4')
+    LLM_TEMPERATURE: float = float(os.getenv('LLM_TEMPERATURE', '0.1'))
     
-    # LLM Settings
-    LLM_MODEL = "gpt-4o-mini"
-    LLM_TEMPERATURE = 0.1
+    # Application Configuration
+    DEBUG: bool = os.getenv('DEBUG', 'false').lower() == 'true'
+    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
+    
+    # CrewAI Specific Configuration
+    CREWAI_MEMORY_ENABLED: bool = os.getenv('CREWAI_MEMORY_ENABLED', 'true').lower() == 'true'
+    CREWAI_VERBOSE: bool = os.getenv('CREWAI_VERBOSE', 'true').lower() == 'true'
+    
+    # Security Assessment Configuration
+    MAX_CVES_PER_ANALYSIS: int = int(os.getenv('MAX_CVES_PER_ANALYSIS', '7'))
+    ASSESSMENT_TIMEOUT: int = int(os.getenv('ASSESSMENT_TIMEOUT', '300'))  # 5 minutes
+    
+    # Network Configuration
+    NMAP_TIMEOUT: int = int(os.getenv('NMAP_TIMEOUT', '300'))
+    NMAP_MAX_THREADS: int = int(os.getenv('NMAP_MAX_THREADS', '10'))
+    
+    # Validation
+    def validate(self) -> bool:
+        """
+        Validate configuration
+        
+        Returns:
+            True if configuration is valid
+        """
+        if not self.OPENAI_API_KEY:
+            print("WARNING: OPENAI_API_KEY not configured - CrewAI will not work")
+            return False
+        
+        return True
+    
+    def get_crewai_config(self) -> dict:
+        """
+        Get CrewAI specific configuration
+        
+        Returns:
+            CrewAI configuration dictionary
+        """
+        return {
+            'openai_api_key': self.OPENAI_API_KEY,
+            'serper_api_key': self.SERPER_API_KEY,
+            'llm_model': self.LLM_MODEL,
+            'llm_temperature': self.LLM_TEMPERATURE,
+            'memory_enabled': self.CREWAI_MEMORY_ENABLED,
+            'verbose': self.CREWAI_VERBOSE,
+            'max_cves': self.MAX_CVES_PER_ANALYSIS,
+            'timeout': self.ASSESSMENT_TIMEOUT
+        }
 
+# Global configuration instance
 config = Config()
+
+# Validate configuration on import
+if not config.validate():
+    print("Configuration validation failed - some features may not work properly")
