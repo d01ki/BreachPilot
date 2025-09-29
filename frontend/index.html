@@ -39,26 +39,6 @@
             margin: 12px 0;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
         }
-        .cve-card {
-            border: 2px solid #e5e7eb;
-            border-radius: 16px;
-            padding: 20px;
-            background: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
-        }
-        .cve-card:hover {
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
-        }
-        .cve-description {
-            background: #f8fafc;
-            border-left: 4px solid #3b82f6;
-            padding: 12px;
-            border-radius: 0 8px 8px 0;
-            margin: 12px 0;
-        }
         .professional-header {
             background: linear-gradient(135deg, #1f2937, #374151);
             color: white;
@@ -109,14 +89,14 @@
         </div>
         
         <div v-if="!sessionId" class="step-card">
-            <h2 class="text-xl font-semibold mb-4">Start Test</h2>
+            <h2 class="text-xl font-semibold mb-4">Start Run</h2>
             <div class="flex items-center space-x-4">
                 <input v-model="targetIp" placeholder="Target IP Address" 
                        class="flex-1 border border-gray-300 rounded-lg px-4 py-2" 
                        @keyup.enter="startScan">
                 <button @click="startScan" 
                         class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                    Start Test
+                    Start Run
                 </button>
                 <button @click="setDemoIp" 
                         class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
@@ -176,14 +156,8 @@
                                 <div class="font-semibold">{{isDomainController(nmapResult) ? 'Detected' : 'Not Detected'}}</div>
                             </div>
                         </div>
-
-                        <div v-if="getServiceInfo(nmapResult)" class="mt-4 pt-3 border-t border-blue-400 border-opacity-30">
-                            <h4 class="font-semibold mb-2">Service Information</h4>
-                            <div class="text-sm opacity-90" v-html="getServiceInfo(nmapResult)"></div>
-                        </div>
                     </div>
                     
-                    <!-- Network Services Table -->
                     <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0" class="mt-4">
                         <h4 class="font-semibold mb-3">Discovered Network Services</h4>
                         <div class="overflow-x-auto">
@@ -217,18 +191,6 @@
                         </div>
                     </div>
                     
-                    <div v-else-if="nmapResult.status === 'completed'" class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <div class="flex">
-                            <span class="text-yellow-600 mr-3">⚠</span>
-                            <div>
-                                <p class="text-sm text-gray-700">
-                                    <strong>No accessible network services detected</strong><br>
-                                    The target system may be offline, protected by a firewall, or all ports are filtered.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div v-if="nmapResult.raw_output" class="mt-4">
                         <button @click="showRawOutput = !showRawOutput" 
                                 class="text-sm text-gray-600 hover:text-gray-800 underline">
@@ -253,8 +215,22 @@
                 </div>
             </div>
 
-            <!-- 以下同様にすべてのセクションを含める... -->
-            
+            <!-- Vulnerability Analysis -->
+            <div class="step-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center">
+                        <span :class="getStatusClass('analyze')" class="status-indicator"></span>
+                        <h2 class="text-xl font-semibold">Vulnerability Assessment</h2>
+                    </div>
+                    <button v-if="nmapComplete && !analysisComplete" @click="runStep('analyze')" 
+                            :disabled="currentStep==='analyze'"
+                            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors">
+                        <span v-if="currentStep==='analyze'" class="spin mr-1">●</span>
+                        {{currentStep==='analyze' ? 'Analyzing...' : 'Execute Analysis'}}
+                    </button>
+                </div>
+            </div>
+
             <!-- Session Management -->
             <div class="step-card">
                 <div class="flex items-center justify-between">
@@ -262,7 +238,7 @@
                         New Assessment
                     </button>
                     <div class="flex items-center space-x-2">
-                        <button v-if="exploitResults.length" @click="downloadResults" 
+                        <button v-if="exploitResults && exploitResults.length" @click="downloadResults" 
                                 class="bg-gray-600 text-white px-3 py-2 text-sm rounded-lg hover:bg-gray-700 transition-colors">
                             Export Raw Data
                         </button>
