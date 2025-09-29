@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
 BreachPilot Professional Security Assessment Framework
-Simplified FastAPI Application - CrewAI Architecture
+FastAPI Application with Frontend Support
 """
 
 import logging
-import time
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend.models import ScanRequest, ScanResult, StepStatus
@@ -44,6 +45,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+static_dir = Path(__file__).parent.parent / "frontend" / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
 # Initialize orchestrator
 try:
     orchestrator = SecurityOrchestrator()
@@ -57,7 +63,7 @@ scan_sessions: Dict[str, ScanResult] = {}
 
 # Request models
 class ScanStartRequest(BaseModel):
-    target: str
+    target_ip: str  # Changed from 'target' to match frontend
     scan_type: str = "comprehensive"
     enable_exploitation: bool = False
 
@@ -69,110 +75,29 @@ class StatusResponse(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main application page"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>BreachPilot Professional - CrewAI Security Assessment</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-            .container { max-width: 1000px; margin: 0 auto; padding: 40px 20px; }
-            .header { text-align: center; color: white; margin-bottom: 40px; }
-            .card { background: white; padding: 30px; margin: 20px 0; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-            .status { padding: 15px; margin: 10px 0; border-radius: 8px; }
-            .success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
-            .warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
-            .error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
-            .feature { margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff; }
-            .api-links { margin-top: 30px; text-align: center; }
-            .api-links a { display: inline-block; margin: 10px 15px; padding: 12px 25px; background: #007bff; color: white; text-decoration: none; border-radius: 25px; transition: all 0.3s; }
-            .api-links a:hover { background: #0056b3; transform: translateY(-2px); }
-            .emoji { font-size: 1.5em; margin-right: 10px; }
-            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-            h1 { font-size: 2.5em; margin-bottom: 10px; }
-            h2 { color: #6c757d; font-weight: 300; }
-            .version { background: #28a745; color: white; padding: 5px 15px; border-radius: 15px; font-size: 0.9em; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1><span class="emoji">🛡️</span>BreachPilot Professional</h1>
-                <h2>CrewAI Security Assessment Framework</h2>
-                <div class="version">Enterprise Edition v2.0</div>
-            </div>
-            
-            <div class="grid">
-                <div class="card">
-                    <h3><span class="emoji">🤖</span>CrewAI Multi-Agent System</h3>
-                    <p>Professional security assessment using 5 specialized AI agents:</p>
-                    <ul>
-                        <li><strong>Elite Vulnerability Hunter</strong> - 15+ years CVE discovery experience</li>
-                        <li><strong>CVE Research Specialist</strong> - Technical analysis expert</li>
-                        <li><strong>Senior Security Analyst</strong> - Business risk assessment</li>
-                        <li><strong>Professional Penetration Tester</strong> - Ethical hacking strategies</li>
-                        <li><strong>Professional Report Writer</strong> - Executive documentation</li>
-                    </ul>
-                </div>
-                
-                <div class="card">
-                    <h3><span class="emoji">🔍</span>Advanced CVE Detection</h3>
-                    <p>Comprehensive vulnerability analysis including:</p>
-                    <ul>
-                        <li><strong>Zerologon</strong> (CVE-2020-1472) - Domain Controller compromise</li>
-                        <li><strong>EternalBlue</strong> (CVE-2017-0144) - SMB remote code execution</li>
-                        <li><strong>BlueKeep</strong> (CVE-2019-0708) - RDP vulnerability</li>
-                        <li><strong>Log4Shell</strong> (CVE-2021-44228) - Java logging vulnerability</li>
-                        <li><strong>PrintNightmare</strong> (CVE-2021-34527) - Windows Print Spooler</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h3><span class="emoji">🚀</span>Quick Start API Example</h3>
-                <p><strong>Endpoint:</strong> POST /scan/start</p>
-                <pre style="background: #f8f9fa; padding: 20px; border-radius: 8px; overflow-x: auto;">curl -X POST "http://localhost:8000/scan/start" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "target": "scanme.nmap.org",
-       "scan_type": "comprehensive",
-       "enable_exploitation": false
-     }'</pre>
-            </div>
-            
-            <div class="api-links">
-                <h3><span class="emoji">📚</span>API Documentation & Tools</h3>
-                <a href="/docs" target="_blank">📖 Interactive API Docs</a>
-                <a href="/redoc" target="_blank">📋 ReDoc Documentation</a>
-                <a href="/status" target="_blank">📊 System Status</a>
-                <a href="/health" target="_blank">💚 Health Check</a>
-                <a href="/crewai/status" target="_blank">🤖 CrewAI Status</a>
-            </div>
-            
-            <div class="card" style="text-align: center; margin-top: 40px;">
-                <h3><span class="emoji">🎯</span>Ready for Professional Security Assessment</h3>
-                <p>Your CrewAI-powered security assessment framework is ready to analyze targets with enterprise-grade AI collaboration.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    html_file = Path(__file__).parent.parent / "frontend" / "index.html"
+    if html_file.exists():
+        return FileResponse(html_file)
+    
+    return HTMLResponse(content="<h1>BreachPilot</h1><p>Frontend not found. Please check installation.</p>")
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     if not orchestrator:
-        return JSONResponse(
-            content={"status": "unhealthy", "message": "Orchestrator not available"},
-            status_code=503
-        )
+        return {
+            "status": "unhealthy",
+            "message": "Orchestrator not available"
+        }
     
-    health_status = await orchestrator.health_check()
-    
-    if health_status.get('overall') == 'healthy':
-        return JSONResponse(content=health_status)
-    else:
-        return JSONResponse(content=health_status, status_code=503)
+    try:
+        health_status = await orchestrator.health_check()
+        return health_status
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "message": str(e)
+        }
 
 @app.get("/status")
 async def get_status() -> StatusResponse:
@@ -230,22 +155,23 @@ async def get_crewai_status():
             "message": "CrewAI initialization failed - check OpenAI API key configuration"
         }
 
-@app.post("/scan/start")
-async def start_scan(request: ScanStartRequest, background_tasks: BackgroundTasks):
-    """Start a comprehensive security assessment"""
+# API endpoints with /api prefix for frontend compatibility
+@app.post("/api/scan/start")
+async def api_start_scan(request: ScanStartRequest, background_tasks: BackgroundTasks):
+    """Start a comprehensive security assessment - API endpoint"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not available")
     
     try:
-        # Create scan request
+        # Create scan request with correct field name
         scan_request = ScanRequest(
-            target=request.target,
+            target=request.target_ip,  # Map target_ip to target
             scan_type=request.scan_type,
             enable_exploitation=request.enable_exploitation
         )
         
         # Generate session ID
-        session_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{request.target.replace('.', '_')}"
+        session_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{request.target_ip.replace('.', '_')}"
         
         # Initialize scan result
         scan_result = ScanResult(
@@ -263,8 +189,8 @@ async def start_scan(request: ScanStartRequest, background_tasks: BackgroundTask
         return {
             "session_id": session_id,
             "status": "started",
-            "message": "CrewAI security assessment started",
-            "target": request.target,
+            "message": "Security assessment started",
+            "target": request.target_ip,
             "scan_type": request.scan_type,
             "agents": 5,
             "estimated_duration": "2-5 minutes"
@@ -274,8 +200,54 @@ async def start_scan(request: ScanStartRequest, background_tasks: BackgroundTask
         logger.error(f"Failed to start scan: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
-@app.get("/scan/{session_id}/status")
-async def get_scan_status(session_id: str):
+@app.post("/api/scan/{session_id}/nmap")
+async def api_run_nmap(session_id: str):
+    """Execute nmap scan"""
+    if session_id not in scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    
+    try:
+        scan_result = scan_sessions[session_id]
+        target = scan_result.request.target
+        
+        # Execute nmap scan through orchestrator
+        nmap_result = await orchestrator.run_nmap_scan(target)
+        
+        # Update session
+        scan_sessions[session_id].nmap_result = nmap_result
+        
+        return nmap_result.dict() if hasattr(nmap_result, 'dict') else nmap_result
+        
+    except Exception as e:
+        logger.error(f"Nmap scan failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Nmap scan failed: {str(e)}")
+
+@app.post("/api/scan/{session_id}/analyze")
+async def api_run_analysis(session_id: str):
+    """Execute vulnerability analysis"""
+    if session_id not in scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    
+    try:
+        scan_result = scan_sessions[session_id]
+        
+        if not scan_result.nmap_result:
+            raise HTTPException(status_code=400, detail="Nmap scan must be completed first")
+        
+        # Execute vulnerability analysis
+        analyst_result = await orchestrator.run_vulnerability_analysis(scan_result.nmap_result)
+        
+        # Update session
+        scan_sessions[session_id].analyst_result = analyst_result
+        
+        return analyst_result.dict() if hasattr(analyst_result, 'dict') else analyst_result
+        
+    except Exception as e:
+        logger.error(f"Vulnerability analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.get("/api/scan/{session_id}/status")
+async def api_get_scan_status(session_id: str):
     """Get status of a running scan"""
     if session_id not in scan_sessions:
         raise HTTPException(status_code=404, detail="Scan session not found")
@@ -294,11 +266,11 @@ async def get_scan_status(session_id: str):
             "exploitation": "✅" if scan_result.exploit_result else ("N/A" if not scan_result.request.enable_exploitation else "⏳"),
             "report": "✅" if scan_result.report_result else "⏳"
         },
-        "message": "CrewAI agents are collaborating on your security assessment..."
+        "message": "Security assessment in progress..."
     }
 
-@app.get("/scan/{session_id}/results")
-async def get_scan_results(session_id: str):
+@app.get("/api/scan/{session_id}/results")
+async def api_get_scan_results(session_id: str):
     """Get complete scan results"""
     if session_id not in scan_sessions:
         raise HTTPException(status_code=404, detail="Scan session not found")
@@ -306,62 +278,19 @@ async def get_scan_results(session_id: str):
     scan_result = scan_sessions[session_id]
     
     if scan_result.status == StepStatus.IN_PROGRESS:
-        raise HTTPException(status_code=202, detail="CrewAI assessment still in progress")
+        raise HTTPException(status_code=202, detail="Assessment still in progress")
     
     # Build comprehensive results
-    result_dict = {
+    return {
         "session_id": session_id,
         "status": scan_result.status.value,
-        "execution_time": f"{scan_result.execution_time:.2f} seconds",
+        "execution_time": scan_result.execution_time,
         "target": scan_result.request.target,
         "scan_type": scan_result.request.scan_type,
-        "crewai_agents": 5,
+        "nmap_result": scan_result.nmap_result.dict() if scan_result.nmap_result and hasattr(scan_result.nmap_result, 'dict') else scan_result.nmap_result,
+        "analyst_result": scan_result.analyst_result.dict() if scan_result.analyst_result and hasattr(scan_result.analyst_result, 'dict') else scan_result.analyst_result,
         "errors": scan_result.errors
     }
-    
-    # Add network scan results
-    if scan_result.nmap_result:
-        result_dict["network_scan"] = {
-            "services_discovered": len(scan_result.nmap_result.services or []),
-            "os_detection": scan_result.nmap_result.os_detection,
-            "scan_time": scan_result.nmap_result.scan_time
-        }
-    
-    # Add CrewAI vulnerability analysis
-    if scan_result.analyst_result:
-        result_dict["vulnerability_analysis"] = {
-            "total_cves": len(scan_result.analyst_result.identified_cves),
-            "critical_vulnerabilities": len([cve for cve in scan_result.analyst_result.identified_cves if cve.severity == "Critical"]),
-            "high_vulnerabilities": len([cve for cve in scan_result.analyst_result.identified_cves if cve.severity == "High"]),
-            "risk_assessment_summary": scan_result.analyst_result.risk_assessment[:300] + "..." if len(scan_result.analyst_result.risk_assessment) > 300 else scan_result.analyst_result.risk_assessment,
-            "priority_cves": scan_result.analyst_result.priority_vulnerabilities,
-            "detailed_findings": [{
-                "cve_id": cve.cve_id,
-                "severity": cve.severity,
-                "cvss_score": cve.cvss_score,
-                "description": cve.description[:200] + "..." if len(cve.description) > 200 else cve.description,
-                "affected_service": cve.affected_service,
-                "exploit_available": cve.exploit_available
-            } for cve in scan_result.analyst_result.identified_cves]
-        }
-    
-    # Add exploitation results if available
-    if scan_result.exploit_result:
-        result_dict["exploitation_analysis"] = {
-            "exploits_tested": len(scan_result.exploit_result.tested_exploits or []),
-            "successful_exploits": len(scan_result.exploit_result.successful_exploits or []),
-            "failed_exploits": len(scan_result.exploit_result.failed_exploits or [])
-        }
-    
-    # Add report summary if available
-    if scan_result.report_result:
-        result_dict["report_summary"] = {
-            "executive_summary": scan_result.report_result.executive_summary[:300] + "..." if len(scan_result.report_result.executive_summary) > 300 else scan_result.report_result.executive_summary,
-            "recommendations": scan_result.report_result.recommendations[:300] + "..." if len(scan_result.report_result.recommendations) > 300 else scan_result.report_result.recommendations,
-            "generation_time": scan_result.report_result.generation_time
-        }
-    
-    return result_dict
 
 async def run_security_assessment(session_id: str, scan_request: ScanRequest):
     """Background task to run security assessment"""
@@ -389,6 +318,7 @@ if __name__ == "__main__":
     
     logger.info("Starting BreachPilot Professional Security Assessment Framework")
     logger.info("CrewAI Architecture - Enterprise Edition v2.0")
+    logger.info("Listening on http://0.0.0.0:8000")
     
     uvicorn.run(
         "backend.main:app",
