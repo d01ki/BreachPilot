@@ -8,7 +8,6 @@ Orchestrates the attack scenario generation pipeline:
 """
 
 import logging
-import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -19,13 +18,8 @@ from backend.scenario.poc_synthesizer import PoCSynthesizer
 from backend.scenario.sandbox_executor import SandboxExecutor
 from backend.scenario.models import AttackScenario, ScenarioStatus
 
-try:
-    from langchain_openai import ChatOpenAI
-    LLM_AVAILABLE = True
-except ImportError:
-    LLM_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("langchain_openai not available. LLM features disabled.")
+from langchain_openai import ChatOpenAI
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +41,12 @@ class ScenarioOrchestrator:
         
         # Initialize LLM if API key is available
         llm = None
-        if use_llm and LLM_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+        if use_llm and os.getenv("OPENAI_API_KEY"):
             try:
                 llm = ChatOpenAI(model="gpt-4", temperature=0.7)
                 logger.info("✅ LLM initialized for scenario generation")
             except Exception as e:
                 logger.warning(f"⚠️ LLM initialization failed: {e}")
-        elif use_llm and not LLM_AVAILABLE:
-            logger.info("📊 LLM not available, using rule-based generation only")
         
         self.scenario_generator = ScenarioGenerator(llm=llm)
         self.poc_synthesizer = PoCSynthesizer()
