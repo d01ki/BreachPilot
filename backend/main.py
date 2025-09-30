@@ -9,19 +9,40 @@ from backend.models import ScanRequest, PoCInfo
 from backend.orchestrator import ScanOrchestrator
 from backend.config import config
 
+# Import scenario routes
+from backend.api.scenario_routes import router as scenario_router
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("uvicorn.access").addFilter(lambda r: "/results" not in r.getMessage())
 
-app = FastAPI(title="BreachPilot API")
+app = FastAPI(title="BreachPilot API", description="AI-Powered Penetration Testing with Attack Scenario Generation")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Include scenario routes
+app.include_router(scenario_router)
 
 orchestrator = ScanOrchestrator()
 active_connections: Dict[str, WebSocket] = {}
 
 @app.get("/")
 async def root():
-    return {"message": "BreachPilot API", "status": "online"}
+    return {
+        "message": "BreachPilot API",
+        "status": "online",
+        "features": [
+            "Automated Reconnaissance",
+            "CVE Analysis",
+            "PoC Search & Execution",
+            "Attack Scenario Generation (NEW)",
+            "Attack Graph Visualization",
+            "Sandbox Execution"
+        ]
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "version": "2.0-arsenal"}
 
 @app.post("/api/scan/start")
 async def start_scan(request: ScanRequest):
@@ -40,12 +61,10 @@ async def run_nmap(session_id: str):
         logger.info(f"Running Nmap for session: {session_id}")
         result = orchestrator.run_nmap(session_id)
         
-        # Log detailed nmap results
         logger.info(f"Nmap completed for session: {session_id}")
         logger.info(f"  - Status: {result.status}")
         logger.info(f"  - Open ports found: {len(result.open_ports) if result.open_ports else 0}")
         logger.info(f"  - Services found: {len(result.services) if result.services else 0}")
-        logger.info(f"  - Raw output length: {len(result.raw_output) if result.raw_output else 0}")
         
         if result.open_ports:
             for port in result.open_ports:
@@ -54,7 +73,6 @@ async def run_nmap(session_id: str):
             logger.warning(f"No open ports found for session: {session_id}")
             
         result_dict = result.model_dump()
-        logger.info(f"Returning nmap result with {len(result_dict.get('open_ports', []))} ports")
         return result_dict
         
     except Exception as e:
@@ -76,12 +94,11 @@ async def run_analysis(session_id: str):
 async def search_pocs(session_id: str, payload: Dict[str, Any] = Body(...)):
     try:
         selected_cves = payload.get('selected_cves', [])
-        limit = payload.get('limit', 4)  # Allow frontend to specify limit
+        limit = payload.get('limit', 4)
         logger.info(f"Searching PoCs for session {session_id}, CVEs: {selected_cves}, limit: {limit}")
         
         results = orchestrator.search_pocs_for_cves(session_id, selected_cves, limit=limit)
         
-        # Log detailed results
         total_pocs = sum(len(r.available_pocs) for r in results)
         total_with_code = sum(len([p for p in r.available_pocs if p.code]) for r in results)
         logger.info(f"PoC search completed: {total_pocs} total PoCs, {total_with_code} with code")
@@ -93,7 +110,6 @@ async def search_pocs(session_id: str, payload: Dict[str, Any] = Body(...)):
 
 @app.post("/api/scan/{session_id}/exploit/single")
 async def execute_single_exploit(session_id: str, payload: Dict[str, Any] = Body(...)):
-    """Execute a single PoC (legacy endpoint - backward compatibility)"""
     try:
         cve_id = payload.get('cve_id')
         poc_data = payload.get('poc')
@@ -115,7 +131,6 @@ async def execute_single_exploit(session_id: str, payload: Dict[str, Any] = Body
 
 @app.post("/api/scan/{session_id}/exploit/multi")
 async def execute_multiple_exploits(session_id: str, payload: Dict[str, Any] = Body(...)):
-    """Execute all available PoCs for a CVE with retry logic"""
     try:
         cve_id = payload.get('cve_id')
         target_ip = payload.get('target_ip')
@@ -137,7 +152,6 @@ async def execute_multiple_exploits(session_id: str, payload: Dict[str, Any] = B
 
 @app.post("/api/scan/{session_id}/exploit/by_index")
 async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Body(...)):
-    """Execute a specific PoC by its index"""
     try:
         cve_id = payload.get('cve_id')
         poc_index = payload.get('poc_index')
@@ -158,7 +172,6 @@ async def execute_exploit_by_index(session_id: str, payload: Dict[str, Any] = Bo
 
 @app.get("/api/scan/{session_id}/exploits/{cve_id}")
 async def get_exploit_results_by_cve(session_id: str, cve_id: str):
-    """Get all exploit results for a specific CVE"""
     try:
         results = orchestrator.get_exploit_results_by_cve(session_id, cve_id)
         return [r.model_dump() for r in results]
@@ -168,7 +181,6 @@ async def get_exploit_results_by_cve(session_id: str, cve_id: str):
 
 @app.get("/api/scan/{session_id}/exploits/successful")
 async def get_successful_exploits(session_id: str):
-    """Get all successful exploit results"""
     try:
         results = orchestrator.get_successful_exploits(session_id)
         return [r.model_dump() for r in results]
@@ -178,7 +190,6 @@ async def get_successful_exploits(session_id: str):
 
 @app.get("/api/scan/{session_id}/poc_files")
 async def get_poc_files_info(session_id: str):
-    """Get information about saved PoC files"""
     try:
         files_info = orchestrator.get_poc_files_info(session_id)
         return files_info
@@ -188,7 +199,6 @@ async def get_poc_files_info(session_id: str):
 
 @app.delete("/api/scan/{session_id}/exploit_files")
 async def cleanup_exploit_files(session_id: str, keep_successful: bool = True):
-    """Clean up exploit files for a session"""
     try:
         orchestrator.cleanup_exploit_files(session_id, keep_successful)
         return {"message": "Exploit files cleaned up successfully"}
@@ -210,25 +220,15 @@ async def get_results(session_id: str):
     try:
         session = orchestrator._get_session(session_id)
         
-        # Build response without OSINT
         response = {
             "nmap_result": session.nmap_result.model_dump() if session.nmap_result else None,
             "analyst_result": session.analyst_result.model_dump() if session.analyst_result else None,
             "poc_results": [p.model_dump() for p in session.poc_results] if session.poc_results else [],
-            "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else []
+            "exploit_results": [e.model_dump() for e in session.exploit_results] if session.exploit_results else [],
+            # NEW: Include scenario data
+            "attack_graph": session.attack_graph if hasattr(session, 'attack_graph') else None,
+            "attack_scenarios": session.attack_scenarios if hasattr(session, 'attack_scenarios') else []
         }
-        
-        # Log what we're returning
-        if session.nmap_result:
-            logger.debug(f"Results endpoint returning nmap data with {len(session.nmap_result.open_ports) if session.nmap_result.open_ports else 0} ports")
-        
-        if session.poc_results:
-            total_pocs = sum(len(pr.available_pocs) for pr in session.poc_results)
-            logger.debug(f"Results endpoint returning {len(session.poc_results)} CVE results with {total_pocs} total PoCs")
-        
-        if session.exploit_results:
-            successful = len([er for er in session.exploit_results if er.success])
-            logger.debug(f"Results endpoint returning {len(session.exploit_results)} exploit results ({successful} successful)")
         
         return response
     except Exception as e:
