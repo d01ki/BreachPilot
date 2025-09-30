@@ -134,3 +134,9 @@ class ScanSession(BaseModel):
     poc_results: List[PoCResult] = Field(default_factory=list)
     exploit_results: List[ExploitResult] = Field(default_factory=list)
     report_data: Optional[ReportData] = None
+    
+    # NEW: Attack Scenario Generation fields
+    attack_graph: Optional[Dict[str, Any]] = None  # AttackGraph serialized
+    attack_scenarios: List[Dict[str, Any]] = Field(default_factory=list)  # AttackScenario serialized
+    synthesized_pocs: Optional[Dict[str, Any]] = None
+    scenario_execution_results: List[Dict[str, Any]] = Field(default_factory=list)
