@@ -23,9 +23,18 @@ router = APIRouter(prefix="/api/scenario", tags=["Attack Scenarios"])
 
 # Global instances
 scan_orchestrator = ScanOrchestrator()
+
+# IMPORTANT: Configure allowed targets here!
+# Replace with your test network IPs before running
 scenario_orchestrator = ScenarioOrchestrator(
-    allowed_targets=["192.168.1.0/24", "10.0.0.0/8"],  # Configure allowed targets
-    use_llm=True
+    allowed_targets=[
+        "192.168.1.0/24",     # Example: Local network
+        "10.0.0.0/8",         # Example: Private network
+        "172.16.0.0/12",      # Example: Private network
+        # Add your specific test IPs:
+        # "192.168.1.100",    # Specific test VM
+    ],
+    use_llm=False  # Set to True if you have OPENAI_API_KEY configured
 )
 
 
@@ -305,7 +314,6 @@ async def execute_scenario(session_id: str,
         
         session = scan_orchestrator._get_session(session_id)
         
-        # Execute scenario (could be made async with background_tasks)
         execution_result = scenario_orchestrator.execute_scenario(
             session=session,
             scenario_id=scenario_id,
@@ -322,7 +330,7 @@ async def execute_scenario(session_id: str,
                 "success": execution_result.get("success", False),
                 "execution_time": execution_result.get("execution_time"),
                 "return_code": execution_result.get("return_code"),
-                "logs_preview": execution_result.get("logs", [])[:10],  # First 10 lines
+                "logs_preview": execution_result.get("logs", [])[:10],
                 "artifacts": execution_result.get("artifacts", [])
             }
         }
@@ -340,7 +348,6 @@ async def get_execution_logs(session_id: str, scenario_id: str):
     try:
         session = scan_orchestrator._get_session(session_id)
         
-        # Find execution result
         for result in session.scenario_execution_results:
             if result["scenario_id"] == scenario_id:
                 return {
@@ -391,7 +398,6 @@ async def cleanup_scenario_resources(session_id: str):
     try:
         logger.info(f"🧹 API: Cleaning up resources for session {session_id}")
         
-        # Cleanup scenario orchestrator resources
         scenario_orchestrator.cleanup()
         
         return {
