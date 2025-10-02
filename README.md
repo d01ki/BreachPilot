@@ -1,4 +1,4 @@
-# BreachPilot - Automated Penetration Testing System
+# PentestPilot - Automated Penetration Testing System
 
 **信頼性と機能性を優先した実務レベルのペネトレーションテストツール**
 
@@ -39,8 +39,8 @@
 
 ```bash
 # リポジトリクローン
-git clone https://github.com/d01ki/BreachPilot.git
-cd BreachPilot
+git clone https://github.com/d01ki/PentestPilot.git
+cd PentestPilot
 
 # 依存関係インストール
 pip install -r requirements.txt
@@ -313,7 +313,7 @@ MIT License - 詳細は[LICENSE](LICENSE)を参照してください。
 問題や質問がある場合:
 
 1. [ドキュメント](FINAL_IMPLEMENTATION_SUMMARY.md)を確認
-2. [GitHub Issues](https://github.com/d01ki/BreachPilot/issues)で報告
+2. [GitHub Issues](https://github.com/d01ki/PentestPilot/issues)で報告
 3. エラーメッセージとログを含めてください
 
 ---
@@ -328,7 +328,7 @@ MIT License - 詳細は[LICENSE](LICENSE)を参照してください。
 
 > "速度よりも信頼性。見逃すよりも徹底的に。"
 
-BreachPilotは、実行時間よりも**確実に脆弱性を検出すること**を優先しています。
+PentestPilotは、実行時間よりも**確実に脆弱性を検出すること**を優先しています。
 パッチ済みシステムでは数分かかりますが、これは偽陰性を防ぐための重要な設計です。
 
 **なぜ2000回の試行なのか？**
