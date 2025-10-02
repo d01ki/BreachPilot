@@ -1,252 +1,248 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>BreachPilot - Professional Penetration Testing Framework</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BreachPilot - Security Assessment Framework</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .pulse-ani { animation: pulse 2s infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .spin { animation: spin 1s linear infinite; }
-        .code-block { 
-            background: #1e1e1e; 
-            color: #d4d4d4; 
-            font-family: 'Courier New', monospace; 
-            font-size: 11px;
+        .pulse-animation { animation: pulse 2s infinite; }
+        .spin-animation { animation: spin 1s linear infinite; }
+        .gradient-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
         }
-        .cvss-critical { background: linear-gradient(135deg, #dc2626, #ef4444); }
-        .cvss-high { background: linear-gradient(135deg, #ea580c, #f97316); }
-        .cvss-medium { background: linear-gradient(135deg, #d97706, #f59e0b); }
-        .cvss-low { background: linear-gradient(135deg, #16a34a, #22c55e); }
-        .cvss-info { background: linear-gradient(135deg, #0d9488, #14b8a6); }
-        .cvss-score { 
-            font-size: 1.5rem; 
-            font-weight: 800; 
-            padding: 8px 16px; 
-            border-radius: 12px; 
-            color: white; 
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .service-info { 
-            background: linear-gradient(135deg, #1e40af, #3b82f6);
-            color: white;
-            border-radius: 12px;
-            padding: 16px;
-            margin: 12px 0;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-        }
-        .professional-header {
-            background: linear-gradient(135deg, #1f2937, #374151);
-            color: white;
-            padding: 24px;
-            border-radius: 12px;
-            margin-bottom: 24px;
-        }
-        .step-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 16px;
-        }
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-        }
-        .status-pending { background-color: #6b7280; }
-        .status-running { background-color: #f59e0b; animation: pulse 2s infinite; }
-        .status-completed { background-color: #10b981; }
-        .status-error { background-color: #ef4444; }
-        .demo-notice {
-            background: linear-gradient(135deg, #059669, #10b981);
-            color: white;
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin: 8px 0;
-            font-size: 0.9em;
-            display: flex;
+        .status-badge {
+            display: inline-flex;
             align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
-        .demo-notice::before {
-            content: "🎯";
-            margin-right: 8px;
-            font-size: 1.2em;
-        }
+        .status-pending { background-color: #e5e7eb; color: #6b7280; }
+        .status-running { background-color: #fef3c7; color: #d97706; }
+        .status-completed { background-color: #d1fae5; color: #059669; }
+        .status-error { background-color: #fee2e2; color: #dc2626; }
     </style>
 </head>
-<body class="bg-gray-100">
-    <div id="app" class="container mx-auto p-6 max-w-7xl">
-        <div class="professional-header">
-            <h1 class="text-3xl font-bold mb-2">BreachPilot</h1>
-            <p class="text-gray-300">Professional Penetration Testing Framework</p>
-        </div>
-        
-        <div v-if="!sessionId" class="step-card">
-            <h2 class="text-xl font-semibold mb-4">Start Run</h2>
-            <div class="flex items-center space-x-4">
-                <input v-model="targetIp" placeholder="Target IP Address" 
-                       class="flex-1 border border-gray-300 rounded-lg px-4 py-2" 
-                       @keyup.enter="startScan">
-                <button @click="startScan" 
-                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                    Start Run
-                </button>
-                <button @click="setDemoIp" 
-                        class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                    Demo Mode
-                </button>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app">
+        <!-- Header -->
+        <header class="gradient-header text-white shadow-lg">
+            <div class="container mx-auto px-6 py-6">
+                <h1 class="text-3xl font-bold">🛡️ BreachPilot</h1>
+                <p class="text-blue-100 mt-1">Professional Security Assessment Framework</p>
             </div>
-            <p class="text-sm text-gray-600 mt-2">Enter the target IP address to begin comprehensive penetration testing</p>
-            <div class="demo-notice">
-                Demo IP: 192.168.1.100 (Click "Demo Mode" to use simulated vulnerable target for testing)
-            </div>
-        </div>
+        </header>
 
-        <div v-if="sessionId" class="space-y-6">
-            <!-- Network Scanning -->
-            <div class="step-card">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center">
-                        <span :class="getStatusClass('nmap')" class="status-indicator"></span>
-                        <h2 class="text-xl font-semibold">Network Service Discovery</h2>
+        <div class="container mx-auto px-6 py-8 max-w-6xl">
+            <!-- Error Alert -->
+            <div v-if="error" class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
                     </div>
-                    <div class="flex items-center space-x-2">
-                        <button v-if="!nmapComplete" @click="runStep('nmap')" 
-                                :disabled="currentStep==='nmap'"
-                                class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors">
-                            <span v-if="currentStep==='nmap'" class="spin mr-1">●</span>
-                            {{currentStep==='nmap' ? 'Scanning...' : 'Execute Scan'}}
-                        </button>
-                        <button v-if="nmapError" @click="retryNmap" 
-                                class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
-                            Retry Scan
-                        </button>
+                    <div class="ml-3">
+                        <p class="text-sm text-red-700">{{ error }}</p>
                     </div>
+                    <button @click="error = null" class="ml-auto">
+                        <span class="text-red-500 hover:text-red-700">✕</span>
+                    </button>
                 </div>
-                
-                <div v-if="isDemoMode && targetIp === '192.168.1.100'" class="demo-notice mb-4">
-                    Demo Mode Active - Using simulated penetration testing results for Windows Server target
-                </div>
-                
-                <div v-if="nmapResult" class="mt-4">
-                    <div class="service-info">
-                        <h3 class="font-bold text-lg mb-3">Network Assessment Results</h3>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                            <div>
-                                <span class="opacity-80">Status:</span>
-                                <div class="font-semibold">{{nmapResult.status}}</div>
-                            </div>
-                            <div>
-                                <span class="opacity-80">Open Ports:</span>
-                                <div class="font-semibold">{{nmapResult.open_ports?.length || 0}}</div>
-                            </div>
-                            <div>
-                                <span class="opacity-80">Operating System:</span>
-                                <div class="font-semibold">{{getOSInfo(nmapResult)}}</div>
-                            </div>
-                            <div>
-                                <span class="opacity-80">Domain Controller:</span>
-                                <div class="font-semibold">{{isDomainController(nmapResult) ? 'Detected' : 'Not Detected'}}</div>
-                            </div>
-                        </div>
+            </div>
+
+            <!-- Start Scan Section -->
+            <div v-if="!sessionId" class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">新しいスキャンを開始</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            ターゲットIPアドレス
+                        </label>
+                        <input 
+                            v-model="targetIp" 
+                            type="text"
+                            placeholder="例: 192.168.1.100"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            @keyup.enter="startScan"
+                        >
+                        <p class="mt-2 text-sm text-gray-500">スキャンするターゲットのIPアドレスを入力してください</p>
                     </div>
                     
-                    <div v-if="nmapResult.open_ports && nmapResult.open_ports.length > 0" class="mt-4">
-                        <h4 class="font-semibold mb-3">Discovered Network Services</h4>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm border-collapse border border-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="border border-gray-200 p-3 text-left">Port</th>
-                                        <th class="border border-gray-200 p-3 text-left">Protocol</th>
-                                        <th class="border border-gray-200 p-3 text-left">Service</th>
-                                        <th class="border border-gray-200 p-3 text-left">Product</th>
-                                        <th class="border border-gray-200 p-3 text-left">Version</th>
-                                        <th class="border border-gray-200 p-3 text-left">Risk Assessment</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="port in nmapResult.open_ports" :key="port.port" class="hover:bg-gray-50">
-                                        <td class="border border-gray-200 p-3 font-mono">{{port.port}}</td>
-                                        <td class="border border-gray-200 p-3">{{port.protocol || 'TCP'}}</td>
-                                        <td class="border border-gray-200 p-3">{{port.service || 'Unknown'}}</td>
-                                        <td class="border border-gray-200 p-3 text-gray-600">{{port.product || 'Not Detected'}}</td>
-                                        <td class="border border-gray-200 p-3 text-gray-500">{{port.version || 'Unknown'}}</td>
-                                        <td class="border border-gray-200 p-3">
-                                            <span :class="getPortRiskClass(port.port, port.service)" 
-                                                  class="px-2 py-1 text-xs rounded text-white font-medium">
-                                                {{getPortRisk(port.port, port.service)}}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <div v-if="nmapResult.raw_output" class="mt-4">
-                        <button @click="showRawOutput = !showRawOutput" 
-                                class="text-sm text-gray-600 hover:text-gray-800 underline">
-                            {{showRawOutput ? 'Hide' : 'Show'}} Technical Details
+                    <div class="flex gap-3">
+                        <button 
+                            @click="startScan" 
+                            :disabled="!targetIp || isLoading"
+                            class="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                        >
+                            <span v-if="isLoading" class="inline-block spin-animation mr-2">⚙️</span>
+                            {{ isLoading ? 'スキャン開始中...' : 'スキャン開始' }}
                         </button>
-                        <div v-if="showRawOutput" class="mt-2 p-3 bg-gray-900 text-green-400 rounded-lg text-xs overflow-auto max-h-64">
-                            <pre>{{nmapResult.raw_output}}</pre>
-                        </div>
                     </div>
                 </div>
-                
-                <div v-if="nmapError" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div class="flex">
-                        <span class="text-red-600 mr-3">❌</span>
+            </div>
+
+            <!-- Scan Progress -->
+            <div v-if="sessionId" class="space-y-6">
+                <!-- Overall Status -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold">スキャン進行状況</h2>
+                        <span :class="getOverallStatusClass()" class="status-badge">
+                            {{ getOverallStatusText() }}
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                            <p class="text-sm text-gray-700">
-                                <strong>Network scan failed</strong><br>
-                                {{nmapError}}
-                            </p>
+                            <span class="text-gray-600">ターゲット:</span>
+                            <p class="font-mono font-semibold">{{ targetIp }}</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">セッションID:</span>
+                            <p class="font-mono text-xs">{{ sessionId }}</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">実行時間:</span>
+                            <p class="font-semibold">{{ formatTime(executionTime) }}</p>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Vulnerability Analysis -->
-            <div class="step-card">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center">
-                        <span :class="getStatusClass('analyze')" class="status-indicator"></span>
-                        <h2 class="text-xl font-semibold">Vulnerability Assessment</h2>
+                <!-- Network Scan -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <h3 class="text-lg font-semibold">1. ネットワークスキャン</h3>
+                            <span v-if="scanStatus.network_scan" class="ml-3 status-badge" :class="'status-' + scanStatus.network_scan">
+                                {{ getStatusText(scanStatus.network_scan) }}
+                            </span>
+                        </div>
+                        <button 
+                            v-if="!nmapResult && !isScanning.nmap"
+                            @click="runNmap"
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                        >
+                            実行
+                        </button>
                     </div>
-                    <button v-if="nmapComplete && !analysisComplete" @click="runStep('analyze')" 
-                            :disabled="currentStep==='analyze'"
-                            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors">
-                        <span v-if="currentStep==='analyze'" class="spin mr-1">●</span>
-                        {{currentStep==='analyze' ? 'Analyzing...' : 'Execute Analysis'}}
-                    </button>
-                </div>
-            </div>
+                    
+                    <div v-if="isScanning.nmap" class="text-center py-8">
+                        <div class="inline-block spin-animation text-4xl mb-2">⚙️</div>
+                        <p class="text-gray-600">ネットワークスキャン実行中...</p>
+                    </div>
 
-            <!-- Session Management -->
-            <div class="step-card">
-                <div class="flex items-center justify-between">
-                    <button @click="reset" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
-                        New Assessment
-                    </button>
-                    <div class="flex items-center space-x-2">
-                        <button v-if="exploitResults && exploitResults.length" @click="downloadResults" 
-                                class="bg-gray-600 text-white px-3 py-2 text-sm rounded-lg hover:bg-gray-700 transition-colors">
-                            Export Raw Data
+                    <div v-if="nmapResult" class="mt-4">
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-600">状態:</span>
+                                    <p class="font-semibold">{{ nmapResult.status }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600">検出ポート:</span>
+                                    <p class="font-semibold">{{ nmapResult.services?.length || 0 }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600">OS:</span>
+                                    <p class="font-semibold">{{ nmapResult.os_detection || 'Unknown' }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600">スキャン時刻:</span>
+                                    <p class="font-semibold text-xs">{{ nmapResult.scan_time }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="nmapResult.services && nmapResult.services.length > 0">
+                            <h4 class="font-semibold mb-2">検出されたサービス</h4>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">ポート</th>
+                                            <th class="px-4 py-2 text-left">サービス</th>
+                                            <th class="px-4 py-2 text-left">製品</th>
+                                            <th class="px-4 py-2 text-left">バージョン</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr v-for="service in nmapResult.services" :key="service.port" class="hover:bg-gray-50">
+                                            <td class="px-4 py-2 font-mono">{{ service.port }}</td>
+                                            <td class="px-4 py-2">{{ service.name }}</td>
+                                            <td class="px-4 py-2">{{ service.product || '-' }}</td>
+                                            <td class="px-4 py-2">{{ service.version || '-' }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vulnerability Analysis -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <h3 class="text-lg font-semibold">2. 脆弱性分析</h3>
+                            <span v-if="scanStatus.analysis" class="ml-3 status-badge" :class="'status-' + scanStatus.analysis">
+                                {{ getStatusText(scanStatus.analysis) }}
+                            </span>
+                        </div>
+                        <button 
+                            v-if="nmapResult && !analystResult && !isScanning.analysis"
+                            @click="runAnalysis"
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                        >
+                            実行
+                        </button>
+                    </div>
+
+                    <div v-if="isScanning.analysis" class="text-center py-8">
+                        <div class="inline-block spin-animation text-4xl mb-2">🤖</div>
+                        <p class="text-gray-600">AI分析実行中...</p>
+                        <p class="text-sm text-gray-500 mt-2">CrewAIによる詳細な脆弱性分析</p>
+                    </div>
+
+                    <div v-if="analystResult" class="mt-4">
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <h4 class="font-semibold mb-2">分析完了</h4>
+                            <p class="text-sm text-gray-700">{{ analystResult.summary || '分析が完了しました' }}</p>
+                            <div v-if="analystResult.identified_cves" class="mt-3">
+                                <span class="text-sm text-gray-600">検出CVE数:</span>
+                                <span class="ml-2 font-semibold">{{ analystResult.identified_cves.length }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex gap-3">
+                        <button 
+                            @click="resetScan"
+                            class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 transition-colors"
+                        >
+                            新しいスキャン
+                        </button>
+                        <button 
+                            v-if="analystResult"
+                            @click="downloadResults"
+                            class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 transition-colors"
+                        >
+                            結果をダウンロード
                         </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
     <script src="/static/app.js"></script>
 </body>
 </html>
