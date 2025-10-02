@@ -41,6 +41,12 @@ weasyprint==60.2
 # PDF Generation (Alternative)
 reportlab==4.0.7
 
+# Word Document Generation
+python-docx==1.1.0
+
+# Enhanced Report Generation
+pandoc==2.3
+
 # Logging and Configuration
 python-dotenv==1.0.0
 
