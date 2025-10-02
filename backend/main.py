@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BreachPilot Professional Security Assessment Framework
-FastAPI Application with Frontend Support
+FastAPI Application - Production Ready
 """
 
 import logging
@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from backend.models import ScanRequest, ScanResult, StepStatus
 from backend.config import config
 from backend.orchestrator import SecurityOrchestrator
-from backend.crews import SecurityAssessmentCrew
 
 # Configure logging
 logging.basicConfig(
@@ -63,7 +62,7 @@ scan_sessions: Dict[str, ScanResult] = {}
 
 # Request models
 class ScanStartRequest(BaseModel):
-    target_ip: str  # Changed from 'target' to match frontend
+    target_ip: str
     scan_type: str = "comprehensive"
     enable_exploitation: bool = False
 
@@ -130,42 +129,16 @@ async def get_status() -> StatusResponse:
             details={}
         )
 
-@app.get("/crewai/status")
-async def get_crewai_status():
-    """Get CrewAI specific status information"""
-    try:
-        crew = SecurityAssessmentCrew()
-        status = crew.get_crew_status()
-        validation = crew.validate_configuration()
-        
-        return {
-            "crewai_version": "2.0.0",
-            "framework_version": "0.51.0",
-            "status": status,
-            "validation": validation,
-            "agents_available": list(crew.agents.keys()) if crew.crew_available else [],
-            "tasks_available": list(crew.tasks_config.keys()) if hasattr(crew, 'tasks_config') else []
-        }
-        
-    except Exception as e:
-        logger.error(f"CrewAI status check failed: {e}")
-        return {
-            "error": str(e),
-            "crewai_available": False,
-            "message": "CrewAI initialization failed - check OpenAI API key configuration"
-        }
-
-# API endpoints with /api prefix for frontend compatibility
 @app.post("/api/scan/start")
 async def api_start_scan(request: ScanStartRequest, background_tasks: BackgroundTasks):
-    """Start a comprehensive security assessment - API endpoint"""
+    """Start a comprehensive security assessment"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not available")
     
     try:
-        # Create scan request with correct field name
+        # Create scan request
         scan_request = ScanRequest(
-            target=request.target_ip,  # Map target_ip to target
+            target=request.target_ip,
             scan_type=request.scan_type,
             enable_exploitation=request.enable_exploitation
         )
@@ -191,9 +164,7 @@ async def api_start_scan(request: ScanStartRequest, background_tasks: Background
             "status": "started",
             "message": "Security assessment started",
             "target": request.target_ip,
-            "scan_type": request.scan_type,
-            "agents": 5,
-            "estimated_duration": "2-5 minutes"
+            "scan_type": request.scan_type
         }
         
     except Exception as e:
@@ -210,16 +181,30 @@ async def api_run_nmap(session_id: str):
         scan_result = scan_sessions[session_id]
         target = scan_result.request.target
         
+        logger.info(f"Executing nmap scan for session {session_id}, target {target}")
+        
         # Execute nmap scan through orchestrator
         nmap_result = await orchestrator.run_nmap_scan(target)
+        
+        if not nmap_result:
+            raise HTTPException(status_code=500, detail="Nmap scan failed to return results")
         
         # Update session
         scan_sessions[session_id].nmap_result = nmap_result
         
-        return nmap_result.dict() if hasattr(nmap_result, 'dict') else nmap_result
+        # Return serialized result
+        return {
+            "target_ip": nmap_result.target_ip,
+            "status": nmap_result.status.value if hasattr(nmap_result.status, 'value') else str(nmap_result.status),
+            "services": nmap_result.services,
+            "open_ports": nmap_result.open_ports,
+            "os_detection": nmap_result.os_detection,
+            "scan_time": nmap_result.scan_time,
+            "vulnerabilities": nmap_result.vulnerabilities
+        }
         
     except Exception as e:
-        logger.error(f"Nmap scan failed: {e}")
+        logger.error(f"Nmap scan failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Nmap scan failed: {str(e)}")
 
 @app.post("/api/scan/{session_id}/analyze")
@@ -234,16 +219,35 @@ async def api_run_analysis(session_id: str):
         if not scan_result.nmap_result:
             raise HTTPException(status_code=400, detail="Nmap scan must be completed first")
         
+        logger.info(f"Executing vulnerability analysis for session {session_id}")
+        
         # Execute vulnerability analysis
         analyst_result = await orchestrator.run_vulnerability_analysis(scan_result.nmap_result)
+        
+        if not analyst_result:
+            raise HTTPException(status_code=500, detail="Vulnerability analysis failed to return results")
         
         # Update session
         scan_sessions[session_id].analyst_result = analyst_result
         
-        return analyst_result.dict() if hasattr(analyst_result, 'dict') else analyst_result
+        # Return serialized result
+        return {
+            "target_ip": analyst_result.target_ip,
+            "status": analyst_result.status.value if hasattr(analyst_result.status, 'value') else str(analyst_result.status),
+            "summary": analyst_result.summary,
+            "identified_cves": [{
+                "cve_id": cve.cve_id,
+                "severity": cve.severity,
+                "cvss_score": cve.cvss_score,
+                "description": cve.description,
+                "affected_service": cve.affected_service
+            } for cve in analyst_result.identified_cves] if analyst_result.identified_cves else [],
+            "risk_assessment": analyst_result.risk_assessment,
+            "recommendations": analyst_result.recommendations
+        }
         
     except Exception as e:
-        logger.error(f"Vulnerability analysis failed: {e}")
+        logger.error(f"Vulnerability analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/api/scan/{session_id}/status")
@@ -256,17 +260,16 @@ async def api_get_scan_status(session_id: str):
     
     return {
         "session_id": session_id,
-        "status": scan_result.status.value,
+        "status": scan_result.status.value if hasattr(scan_result.status, 'value') else str(scan_result.status),
         "target": scan_result.request.target,
         "execution_time": scan_result.execution_time,
         "errors": scan_result.errors,
         "progress": {
-            "network_scan": "✅" if scan_result.nmap_result else "⏳",
-            "crewai_analysis": "✅" if scan_result.analyst_result else "⏳",
-            "exploitation": "✅" if scan_result.exploit_result else ("N/A" if not scan_result.request.enable_exploitation else "⏳"),
-            "report": "✅" if scan_result.report_result else "⏳"
-        },
-        "message": "Security assessment in progress..."
+            "network_scan": "completed" if scan_result.nmap_result else "pending",
+            "analysis": "completed" if scan_result.analyst_result else "pending",
+            "exploitation": "completed" if scan_result.exploit_result else ("N/A" if not scan_result.request.enable_exploitation else "pending"),
+            "report": "completed" if scan_result.report_result else "pending"
+        }
     }
 
 @app.get("/api/scan/{session_id}/results")
@@ -283,12 +286,12 @@ async def api_get_scan_results(session_id: str):
     # Build comprehensive results
     return {
         "session_id": session_id,
-        "status": scan_result.status.value,
+        "status": scan_result.status.value if hasattr(scan_result.status, 'value') else str(scan_result.status),
         "execution_time": scan_result.execution_time,
         "target": scan_result.request.target,
         "scan_type": scan_result.request.scan_type,
-        "nmap_result": scan_result.nmap_result.dict() if scan_result.nmap_result and hasattr(scan_result.nmap_result, 'dict') else scan_result.nmap_result,
-        "analyst_result": scan_result.analyst_result.dict() if scan_result.analyst_result and hasattr(scan_result.analyst_result, 'dict') else scan_result.analyst_result,
+        "nmap_result": scan_result.nmap_result.model_dump() if scan_result.nmap_result else None,
+        "analyst_result": scan_result.analyst_result.model_dump() if scan_result.analyst_result else None,
         "errors": scan_result.errors
     }
 
@@ -317,7 +320,7 @@ if __name__ == "__main__":
     import uvicorn
     
     logger.info("Starting BreachPilot Professional Security Assessment Framework")
-    logger.info("CrewAI Architecture - Enterprise Edition v2.0")
+    logger.info("CrewAI Architecture - Production Edition v2.0")
     logger.info("Listening on http://0.0.0.0:8000")
     
     uvicorn.run(

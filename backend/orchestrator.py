@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BreachPilot Professional Security Assessment Orchestrator
-Simplified and cleaned up for CrewAI Architecture
+Production-ready with real nmap integration
 """
 
 import asyncio
@@ -15,37 +15,11 @@ from backend.models import (
     ExploitResult, ReportResult, StepStatus
 )
 from backend.config import config
+from backend.scanners.nmap_scanner import NmapScanner
 from backend.crews import SecurityAssessmentCrew
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-class MockNmapScanner:
-    """Mock Nmap scanner for demonstration"""
-    
-    def scan_target(self, target: str, scan_type: str = "comprehensive", port_range: str = None) -> NmapResult:
-        """Mock nmap scan"""
-        logger.info(f"Mock scanning {target}")
-        
-        # Simulate scan results
-        services = [
-            {"port": 445, "name": "microsoft-ds", "product": "Microsoft Windows", "version": "Server 2019"},
-            {"port": 3389, "name": "ms-wbt-server", "product": "Microsoft Terminal Services", "version": ""}
-        ]
-        
-        if "scanme" in target.lower():
-            services.extend([
-                {"port": 22, "name": "ssh", "product": "OpenSSH", "version": "8.2"},
-                {"port": 80, "name": "http", "product": "Apache", "version": "2.4.41"}
-            ])
-        
-        return NmapResult(
-            target_ip=target,
-            services=services,
-            os_detection="Microsoft Windows Server 2019" if "192.168" in target else "Linux Ubuntu 20.04",
-            scan_time=time.strftime("%Y-%m-%d %H:%M:%S"),
-            status=StepStatus.COMPLETED
-        )
 
 class MockExploitEngine:
     """Mock exploit engine for demonstration"""
@@ -79,8 +53,8 @@ class MockReportGenerator:
 
 class SecurityOrchestrator:
     """
-    Simplified Security Assessment Orchestrator
-    Focuses on CrewAI integration without complex dependencies
+    Production Security Assessment Orchestrator
+    Integrates real nmap scanning with CrewAI analysis
     """
     
     def __init__(self):
@@ -92,8 +66,10 @@ class SecurityOrchestrator:
             self.security_crew = SecurityAssessmentCrew()
             self.crew_available = self.security_crew.crew_available
             
-            # Initialize mock components for demonstration
-            self.nmap_scanner = MockNmapScanner()
+            # Initialize real nmap scanner
+            self.nmap_scanner = NmapScanner()
+            
+            # Initialize mock components for features not yet implemented
             self.exploit_engine = MockExploitEngine()
             self.report_generator = MockReportGenerator()
             
@@ -106,6 +82,7 @@ class SecurityOrchestrator:
             }
             
             logger.info("SecurityOrchestrator initialized successfully")
+            logger.info(f"CrewAI available: {self.crew_available}")
             
         except Exception as e:
             logger.error(f"Failed to initialize SecurityOrchestrator: {e}")
@@ -178,25 +155,79 @@ class SecurityOrchestrator:
         
         return result
     
-    async def _execute_nmap_scan(self, request: ScanRequest) -> Optional[NmapResult]:
-        """Execute network scan"""
+    async def run_nmap_scan(self, target: str) -> NmapResult:
+        """Execute nmap scan and return results"""
+        logger.info(f"Starting nmap scan for {target}")
+        
         try:
+            # Create a scan request
+            request = ScanRequest(
+                target=target,
+                scan_type="comprehensive",
+                enable_exploitation=False
+            )
+            
+            # Execute the scan
+            result = await self._execute_nmap_scan(request)
+            
+            if result:
+                logger.info(f"Nmap scan completed: {len(result.services or [])} services found")
+            else:
+                logger.error("Nmap scan returned no results")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Nmap scan failed: {e}")
+            raise
+    
+    async def run_vulnerability_analysis(self, nmap_result: NmapResult) -> AnalystResult:
+        """Execute vulnerability analysis on nmap results"""
+        logger.info(f"Starting vulnerability analysis for {nmap_result.target_ip}")
+        
+        try:
+            result = await self._execute_crewai_analysis(nmap_result.target_ip, nmap_result)
+            
+            if result:
+                logger.info(f"Analysis completed: {len(result.identified_cves or [])} CVEs identified")
+            else:
+                logger.error("Vulnerability analysis returned no results")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Vulnerability analysis failed: {e}")
+            raise
+    
+    async def _execute_nmap_scan(self, request: ScanRequest) -> Optional[NmapResult]:
+        """Execute network scan using real nmap"""
+        try:
+            logger.info(f"Executing nmap scan on {request.target}")
+            
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
-                    self.nmap_scanner.scan_target,
-                    request.target,
-                    request.scan_type,
-                    request.port_range
+                    self.nmap_scanner.scan,
+                    request.target
                 )
                 nmap_result = future.result(timeout=config.NMAP_TIMEOUT)
             
             if nmap_result:
                 logger.info(f"Network scan completed: {len(nmap_result.services or [])} services found")
+                
+                # Log discovered services
+                if nmap_result.services:
+                    for service in nmap_result.services:
+                        logger.info(f"  - Port {service.get('port')}: {service.get('name')} ({service.get('product', 'Unknown')})")
+            else:
+                logger.warning("Nmap scan returned no results")
             
             return nmap_result
             
+        except subprocess.TimeoutExpired:
+            logger.error(f"Network scan timeout for {request.target}")
+            return None
         except Exception as e:
-            logger.error(f"Network scan failed: {e}")
+            logger.error(f"Network scan failed: {e}", exc_info=True)
             return None
     
     async def _execute_crewai_analysis(self, target_ip: str, nmap_result: Optional[NmapResult]) -> Optional[AnalystResult]:
@@ -205,11 +236,13 @@ class SecurityOrchestrator:
             logger.error("CrewAI not available")
             return None
         
-        if not nmap_result:
+        if not nmap_result or not nmap_result.services:
             logger.warning("No nmap results available for analysis")
             return None
         
         try:
+            logger.info(f"Starting CrewAI analysis for {target_ip}")
+            
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
                     self.security_crew.analyze_target,
@@ -218,13 +251,20 @@ class SecurityOrchestrator:
                 )
                 analyst_result = future.result(timeout=config.ASSESSMENT_TIMEOUT)
             
-            if analyst_result and analyst_result.identified_cves:
-                logger.info(f"CrewAI analysis completed: {len(analyst_result.identified_cves)} CVEs identified")
+            if analyst_result:
+                if analyst_result.identified_cves:
+                    logger.info(f"CrewAI analysis completed: {len(analyst_result.identified_cves)} CVEs identified")
+                    for cve in analyst_result.identified_cves[:5]:  # Log first 5 CVEs
+                        logger.info(f"  - {cve.cve_id}: {cve.severity} ({cve.cvss_score})")
+                else:
+                    logger.info("CrewAI analysis completed: No CVEs identified")
+            else:
+                logger.warning("CrewAI analysis returned no results")
             
             return analyst_result
             
         except Exception as e:
-            logger.error(f"CrewAI analysis failed: {e}")
+            logger.error(f"CrewAI analysis failed: {e}", exc_info=True)
             return None
     
     async def _execute_exploitation(self, target_ip: str, cves: list) -> Optional[ExploitResult]:
