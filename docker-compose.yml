@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  breachpilot:
+  pentestpilot:
     build: .
-    container_name: breachpilot
+    container_name: pentestpilot
     ports:
       - "8000:8000"
     volumes:
@@ -16,8 +16,8 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - breachpilot-network
+      - pentestpilot-network
 
 networks:
-  breachpilot-network:
+  pentestpilot-network:
     driver: bridge
