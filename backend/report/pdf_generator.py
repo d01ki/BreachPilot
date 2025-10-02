@@ -1,546 +1,476 @@
+#!/usr/bin/env python3
 """
-PDF Report Generator - Professional PDF report generation with charts and formatting
+Professional PDF Report Generator
+Generates executive-level penetration testing reports
 """
 
-from pathlib import Path
+import os
 from datetime import datetime
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, List
 import logging
-import tempfile
-import subprocess
-import json
+
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch, cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        PageBreak, Image, KeepTogether
+    )
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+    from reportlab.pdfgen import canvas
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
-class PDFReportGenerator:
-    """Generate professional PDF reports with advanced formatting"""
+class ProfessionalPDFGenerator:
+    """Generate professional penetration testing reports"""
     
-    def __init__(self, reports_dir: Path):
-        self.reports_dir = reports_dir
-        self.reports_dir.mkdir(exist_ok=True)
+    def __init__(self):
+        if not REPORTLAB_AVAILABLE:
+            raise ImportError("reportlab is required for PDF generation. Install with: pip install reportlab")
+        
+        self.styles = getSampleStyleSheet()
+        self._setup_custom_styles()
     
-    def generate_pdf_report(self, target_ip: str, report_data: Dict[str, Any], output_path: Path) -> Path:
-        """Generate comprehensive PDF report"""
-        logger.info(f"Generating PDF report for {target_ip}")
+    def _setup_custom_styles(self):
+        """Setup custom paragraph styles"""
+        # Title style
+        self.styles.add(ParagraphStyle(
+            name='CustomTitle',
+            parent=self.styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#1a1a1a'),
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        ))
         
-        try:
-            # Try to use weasyprint for HTML to PDF conversion
-            from weasyprint import HTML, CSS
-            from weasyprint.text.fonts import FontConfiguration
-            
-            # Generate HTML content first
-            html_content = self._generate_html_content(target_ip, report_data)
-            
-            # Create CSS for PDF styling
-            css_content = self._generate_pdf_css()
-            
-            # Generate PDF
-            font_config = FontConfiguration()
-            html_doc = HTML(string=html_content)
-            css_doc = CSS(string=css_content, font_config=font_config)
-            
-            html_doc.write_pdf(str(output_path), stylesheets=[css_doc], font_config=font_config)
-            logger.info(f"PDF report generated successfully: {output_path}")
-            
-        except ImportError:
-            logger.warning("WeasyPrint not available, using fallback method")
-            self._generate_fallback_pdf(target_ip, report_data, output_path)
-            
-        except Exception as e:
-            logger.error(f"PDF generation failed: {e}")
-            self._generate_error_pdf(output_path, target_ip, str(e))
+        # Executive Summary style
+        self.styles.add(ParagraphStyle(
+            name='ExecutiveSummary',
+            parent=self.styles['BodyText'],
+            fontSize=11,
+            leading=16,
+            spaceAfter=12,
+            alignment=TA_JUSTIFY
+        ))
         
-        return output_path
+        # Section Header
+        self.styles.add(ParagraphStyle(
+            name='SectionHeader',
+            parent=self.styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceBefore=20,
+            spaceAfter=12,
+            fontName='Helvetica-Bold'
+        ))
+        
+        # Finding Title
+        self.styles.add(ParagraphStyle(
+            name='FindingTitle',
+            parent=self.styles['Heading3'],
+            fontSize=12,
+            textColor=colors.HexColor('#e74c3c'),
+            spaceBefore=15,
+            spaceAfter=8,
+            fontName='Helvetica-Bold'
+        ))
     
-    def _generate_html_content(self, target_ip: str, report_data: Dict[str, Any]) -> str:
-        """Generate HTML content for PDF conversion"""
+    def generate_report(self, scan_data: Dict[str, Any], output_path: str):
+        """Generate complete penetration testing report"""
+        logger.info(f"Generating PDF report: {output_path}")
         
-        metadata = report_data.get("report_metadata", {})
-        executive_summary = report_data.get("executive_summary", {})
-        risk_assessment = report_data.get("risk_assessment", {})
-        technical_analysis = report_data.get("technical_analysis", {})
-        compliance_analysis = report_data.get("compliance_analysis", {})
-        recommendations = report_data.get("detailed_recommendations", [])
-        roadmap = report_data.get("remediation_roadmap", {})
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=18,
+        )
         
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Security Assessment Report - {target_ip}</title>
-        </head>
-        <body>
-            <!-- Cover Page -->
-            <div class="cover-page">
-                <div class="header">
-                    <h1>SECURITY ASSESSMENT REPORT</h1>
-                    <h2>{target_ip}</h2>
-                    <div class="metadata">
-                        <p><strong>Report ID:</strong> {metadata.get('report_id', 'N/A')}</p>
-                        <p><strong>Date:</strong> {metadata.get('generation_date', 'N/A')}</p>
-                        <p><strong>Classification:</strong> {metadata.get('classification', 'CONFIDENTIAL')}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Executive Summary -->
-            <div class="section">
-                <h1>Executive Summary</h1>
-                <div class="executive-content">
-                    <h2>Assessment Overview</h2>
-                    <p>{executive_summary.get('assessment_overview', 'Assessment completed.')}</p>
-                    
-                    <h2>Key Findings</h2>
-                    <ul>
-                        {"".join(f"<li>{finding}</li>" for finding in executive_summary.get('key_findings', []))}
-                    </ul>
-                    
-                    <h2>Critical Risks</h2>
-                    <ul>
-                        {"".join(f"<li>{risk}</li>" for risk in executive_summary.get('critical_risks', []))}
-                    </ul>
-                    
-                    <h2>Immediate Actions Required</h2>
-                    <ul>
-                        {"".join(f"<li>{action}</li>" for action in executive_summary.get('immediate_actions', []))}
-                    </ul>
-                </div>
-            </div>
-            
-            <!-- Risk Assessment -->
-            <div class="section">
-                <h1>Risk Assessment</h1>
-                <div class="risk-metrics">
-                    <div class="metric-row">
-                        <div class="metric">
-                            <strong>Overall Risk Level:</strong> {risk_assessment.get('overall_risk_level', 'Unknown')}
-                        </div>
-                        <div class="metric">
-                            <strong>Risk Score:</strong> {risk_assessment.get('risk_score', 0):.1f}/10
-                        </div>
-                    </div>
-                    <div class="metric-row">
-                        <div class="metric">
-                            <strong>Critical Vulnerabilities:</strong> {risk_assessment.get('critical_vulnerabilities', 0)}
-                        </div>
-                        <div class="metric">
-                            <strong>High Vulnerabilities:</strong> {risk_assessment.get('high_vulnerabilities', 0)}
-                        </div>
-                    </div>
-                    <div class="metric-row">
-                        <div class="metric">
-                            <strong>Financial Impact:</strong> {risk_assessment.get('financial_impact_estimate', 'Unknown')}
-                        </div>
-                        <div class="metric">
-                            <strong>Remediation Priority:</strong> {risk_assessment.get('remediation_priority', 'Unknown')}
-                        </div>
-                    </div>
-                </div>
-                
-                <h2>Business Impact Analysis</h2>
-                <p><strong>Impact:</strong> {risk_assessment.get('business_impact', 'Assessment in progress.')}</p>
-                <p><strong>Technical Impact:</strong> {risk_assessment.get('technical_impact', 'Assessment in progress.')}</p>
-                <p><strong>Likelihood:</strong> {risk_assessment.get('likelihood', 'Assessment in progress.')}</p>
-            </div>
-            
-            <!-- Technical Analysis -->
-            <div class="section">
-                <h1>Technical Analysis</h1>
-                
-                <h2>Attack Vectors</h2>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>CVE ID</th>
-                            <th>Attack Type</th>
-                            <th>Target Service</th>
-                            <th>Complexity</th>
-                            <th>Impact</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {"".join(f"""
-                        <tr>
-                            <td>{vector.get('cve_id', 'N/A')}</td>
-                            <td>{vector.get('attack_type', 'Unknown')}</td>
-                            <td>{vector.get('target_service', 'Unknown')}</td>
-                            <td>{vector.get('complexity', 'Unknown')}</td>
-                            <td>{vector.get('impact', 'Unknown')}</td>
-                        </tr>
-                        """ for vector in technical_analysis.get('attack_vectors', [])[:10])}
-                    </tbody>
-                </table>
-                
-                <h2>Lateral Movement Analysis</h2>
-                <p><strong>Network Segments:</strong> {technical_analysis.get('lateral_movement_potential', {}).get('network_segments', 'Unknown')}</p>
-                <p><strong>Privileged Services:</strong> {technical_analysis.get('lateral_movement_potential', {}).get('privileged_services', 'Unknown')}</p>
-                <p><strong>Risk Level:</strong> {technical_analysis.get('lateral_movement_potential', {}).get('risk_level', 'Unknown')}</p>
-            </div>
-            
-            <!-- Recommendations -->
-            <div class="section">
-                <h1>Detailed Recommendations</h1>
-                {"".join(f"""
-                <div class="recommendation">
-                    <h3>{rec.get('title', 'Recommendation')}</h3>
-                    <p><strong>Priority:</strong> {rec.get('priority', 'Unknown')}</p>
-                    <p><strong>Category:</strong> {rec.get('category', 'Unknown')}</p>
-                    <p><strong>Description:</strong> {rec.get('description', 'No description available.')}</p>
-                    <p><strong>Business Justification:</strong> {rec.get('business_justification', 'No justification provided.')}</p>
-                    <p><strong>Timeline:</strong> {rec.get('timeline', 'Unknown')}</p>
-                    <p><strong>Estimated Cost:</strong> {rec.get('estimated_cost', 'Unknown')}</p>
-                </div>
-                """ for rec in recommendations)}
-            </div>
-            
-            <!-- Remediation Roadmap -->
-            <div class="section">
-                <h1>Remediation Roadmap</h1>
-                {"".join(f"""
-                <div class="roadmap-phase">
-                    <h3>{phase.get('phase', 'Phase')}</h3>
-                    <p><strong>Focus:</strong> {phase.get('focus', 'Unknown')}</p>
-                    <p><strong>Activities:</strong></p>
-                    <ul>
-                        {"".join(f"<li>{activity}</li>" for activity in phase.get('activities', []))}
-                    </ul>
-                    <p><strong>Success Criteria:</strong> {phase.get('success_criteria', 'Unknown')}</p>
-                    <p><strong>Budget:</strong> {phase.get('budget', 'Unknown')}</p>
-                </div>
-                """ for phase in roadmap.get('phases', []))}
-                
-                <div class="roadmap-summary">
-                    <h3>Summary</h3>
-                    <p><strong>Total Estimated Cost:</strong> {roadmap.get('total_estimated_cost', 'Unknown')}</p>
-                    <p><strong>Expected ROI:</strong> {roadmap.get('expected_roi', 'Unknown')}</p>
-                    <p><strong>Timeline:</strong> {roadmap.get('timeline', 'Unknown')}</p>
-                </div>
-            </div>
-            
-            <!-- Compliance Analysis -->
-            <div class="section">
-                <h1>Compliance Analysis</h1>
-                <h2>Applicable Frameworks</h2>
-                <ul>
-                    {"".join(f"<li>{framework}</li>" for framework in compliance_analysis.get('applicable_frameworks', []))}
-                </ul>
-                
-                <h2>Compliance Gaps</h2>
-                {"".join(f"""
-                <div class="compliance-gap">
-                    <h4>{gap.get('framework', 'Unknown Framework')}</h4>
-                    <p><strong>Requirement:</strong> {gap.get('requirement', 'Unknown')}</p>
-                    <p><strong>Gap:</strong> {gap.get('gap', 'Unknown')}</p>
-                    <p><strong>Impact:</strong> {gap.get('impact', 'Unknown')}</p>
-                </div>
-                """ for gap in compliance_analysis.get('compliance_gaps', []))}
-            </div>
-            
-            <!-- Footer -->
-            <div class="footer">
-                <p>Generated by BreachPilot Professional Security Assessment Platform</p>
-                <p>Report Classification: {metadata.get('classification', 'CONFIDENTIAL')}</p>
-                <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
-            </div>
-        </body>
-        </html>
+        story = []
+        
+        # Cover Page
+        story.extend(self._create_cover_page(scan_data))
+        story.append(PageBreak())
+        
+        # Table of Contents
+        story.extend(self._create_toc())
+        story.append(PageBreak())
+        
+        # Executive Summary
+        story.extend(self._create_executive_summary(scan_data))
+        story.append(PageBreak())
+        
+        # Methodology
+        story.extend(self._create_methodology())
+        story.append(PageBreak())
+        
+        # Findings
+        story.extend(self._create_findings(scan_data))
+        story.append(PageBreak())
+        
+        # Recommendations
+        story.extend(self._create_recommendations(scan_data))
+        story.append(PageBreak())
+        
+        # Technical Details
+        story.extend(self._create_technical_details(scan_data))
+        story.append(PageBreak())
+        
+        # Appendix
+        story.extend(self._create_appendix(scan_data))
+        
+        # Build PDF
+        doc.build(story, onFirstPage=self._add_page_number, onLaterPages=self._add_page_number)
+        logger.info(f"PDF report generated successfully: {output_path}")
+    
+    def _create_cover_page(self, data: Dict[str, Any]) -> List:
+        """Create professional cover page"""
+        story = []
+        
+        story.append(Spacer(1, 1*inch))
+        
+        # Report Title
+        title = Paragraph(
+            "<b>PENETRATION TESTING REPORT</b>",
+            self.styles['CustomTitle']
+        )
+        story.append(title)
+        story.append(Spacer(1, 0.5*inch))
+        
+        # Client Information
+        client_info = f"""
+            <para alignment='center'>
+            <b>Target:</b> {data.get('target', 'N/A')}<br/>
+            <b>Assessment Type:</b> Network Infrastructure<br/>
+            <b>Date:</b> {datetime.now().strftime('%B %d, %Y')}<br/>
+            <b>Version:</b> 1.0<br/>
+            </para>
+        """
+        story.append(Paragraph(client_info, self.styles['BodyText']))
+        story.append(Spacer(1, 1*inch))
+        
+        # Confidentiality Notice
+        confidentiality = """
+            <para alignment='center' fontSize='10' textColor='red'>
+            <b>CONFIDENTIAL</b><br/>
+            This document contains sensitive security information.<br/>
+            Unauthorized disclosure is prohibited.
+            </para>
+        """
+        story.append(Paragraph(confidentiality, self.styles['BodyText']))
+        
+        return story
+    
+    def _create_toc(self) -> List:
+        """Create table of contents"""
+        story = []
+        
+        story.append(Paragraph("<b>TABLE OF CONTENTS</b>", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.3*inch))
+        
+        toc_data = [
+            ['1.', 'Executive Summary', '3'],
+            ['2.', 'Methodology', '4'],
+            ['3.', 'Findings Summary', '5'],
+            ['4.', 'Detailed Findings', '6'],
+            ['5.', 'Recommendations', '10'],
+            ['6.', 'Technical Details', '12'],
+            ['7.', 'Appendix', '15'],
+        ]
+        
+        toc_table = Table(toc_data, colWidths=[0.5*inch, 5*inch, 0.5*inch])
+        toc_table.setStyle(TableStyle([
+            ('FONT', (0, 0), (-1, -1), 'Helvetica', 11),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+        ]))
+        
+        story.append(toc_table)
+        
+        return story
+    
+    def _create_executive_summary(self, data: Dict[str, Any]) -> List:
+        """Create executive summary"""
+        story = []
+        
+        story.append(Paragraph("1. EXECUTIVE SUMMARY", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Assessment Overview
+        summary_text = f"""
+            BreachPilot conducted a comprehensive penetration test of the target infrastructure 
+            at {data.get('target', 'N/A')} on {datetime.now().strftime('%B %d, %Y')}. 
+            The assessment identified {len(data.get('vulnerabilities', []))} security vulnerabilities 
+            of varying severity levels.
+            <br/><br/>
+            <b>Key Findings:</b><br/>
         """
         
-        return html_content
-    
-    def _generate_pdf_css(self) -> str:
-        """Generate CSS styles for PDF formatting"""
-        return """
-        @page {
-            size: A4;
-            margin: 2cm;
-            @top-center {
-                content: "Security Assessment Report";
-                font-size: 10pt;
-                color: #666;
-            }
-            @bottom-center {
-                content: "Page " counter(page) " of " counter(pages);
-                font-size: 10pt;
-                color: #666;
-            }
-        }
+        # Count vulnerabilities by severity
+        vulns = data.get('vulnerabilities', [])
+        critical = len([v for v in vulns if v.get('severity') == 'CRITICAL'])
+        high = len([v for v in vulns if v.get('severity') == 'HIGH'])
+        medium = len([v for v in vulns if v.get('severity') == 'MEDIUM'])
+        low = len([v for v in vulns if v.get('severity') == 'LOW'])
         
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            font-size: 11pt;
-        }
-        
-        .cover-page {
-            text-align: center;
-            page-break-after: always;
-            padding-top: 10cm;
-        }
-        
-        .header h1 {
-            font-size: 24pt;
-            color: #2c3e50;
-            margin-bottom: 20pt;
-            font-weight: bold;
-        }
-        
-        .header h2 {
-            font-size: 18pt;
-            color: #34495e;
-            margin-bottom: 30pt;
-        }
-        
-        .metadata {
-            font-size: 12pt;
-            color: #666;
-            text-align: left;
-            max-width: 400pt;
-            margin: 0 auto;
-        }
-        
-        .section {
-            page-break-before: always;
-            margin-bottom: 30pt;
-        }
-        
-        .section:first-of-type {
-            page-break-before: auto;
-        }
-        
-        h1 {
-            font-size: 18pt;
-            color: #2c3e50;
-            border-bottom: 2pt solid #3498db;
-            padding-bottom: 5pt;
-            margin-bottom: 20pt;
-            font-weight: bold;
-        }
-        
-        h2 {
-            font-size: 14pt;
-            color: #34495e;
-            margin-top: 20pt;
-            margin-bottom: 10pt;
-            font-weight: bold;
-        }
-        
-        h3 {
-            font-size: 12pt;
-            color: #34495e;
-            margin-top: 15pt;
-            margin-bottom: 8pt;
-            font-weight: bold;
-        }
-        
-        h4 {
-            font-size: 11pt;
-            color: #34495e;
-            margin-top: 10pt;
-            margin-bottom: 5pt;
-            font-weight: bold;
-        }
-        
-        .risk-metrics {
-            background: #f8f9fa;
-            padding: 15pt;
-            border: 1pt solid #dee2e6;
-            margin-bottom: 20pt;
-        }
-        
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8pt;
-        }
-        
-        .metric {
-            flex: 1;
-            padding: 5pt;
-        }
-        
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 15pt 0;
-            font-size: 10pt;
-        }
-        
-        .data-table th {
-            background: #34495e;
-            color: white;
-            padding: 8pt;
-            text-align: left;
-            font-weight: bold;
-            border: 1pt solid #2c3e50;
-        }
-        
-        .data-table td {
-            padding: 6pt 8pt;
-            border: 1pt solid #dee2e6;
-            vertical-align: top;
-        }
-        
-        .data-table tr:nth-child(even) {
-            background: #f8f9fa;
-        }
-        
-        .recommendation {
-            background: #fff3cd;
-            border: 1pt solid #ffeaa7;
-            padding: 12pt;
-            margin: 10pt 0;
-            border-radius: 3pt;
-        }
-        
-        .roadmap-phase {
-            background: #e8f4fd;
-            border: 1pt solid #3498db;
-            padding: 12pt;
-            margin: 10pt 0;
-            border-radius: 3pt;
-        }
-        
-        .roadmap-summary {
-            background: #d4edda;
-            border: 1pt solid #c3e6cb;
-            padding: 12pt;
-            margin: 15pt 0;
-            border-radius: 3pt;
-        }
-        
-        .compliance-gap {
-            background: #f8d7da;
-            border: 1pt solid #f5c6cb;
-            padding: 10pt;
-            margin: 8pt 0;
-            border-radius: 3pt;
-        }
-        
-        .executive-content {
-            background: #e8f4fd;
-            padding: 15pt;
-            border-left: 4pt solid #3498db;
-        }
-        
-        ul, ol {
-            margin-left: 20pt;
-            margin-bottom: 10pt;
-        }
-        
-        li {
-            margin-bottom: 5pt;
-        }
-        
-        p {
-            margin-bottom: 10pt;
-            text-align: justify;
-        }
-        
-        .footer {
-            margin-top: 30pt;
-            padding-top: 15pt;
-            border-top: 1pt solid #dee2e6;
-            font-size: 9pt;
-            color: #666;
-            text-align: center;
-        }
-        
-        strong {
-            font-weight: bold;
-        }
-        
-        /* Ensure proper page breaks */
-        .section h1 {
-            page-break-after: avoid;
-        }
-        
-        .section h2 {
-            page-break-after: avoid;
-        }
-        
-        .data-table {
-            page-break-inside: avoid;
-        }
-        
-        .recommendation {
-            page-break-inside: avoid;
-        }
-        """
-    
-    def _generate_fallback_pdf(self, target_ip: str, report_data: Dict[str, Any], output_path: Path):
-        """Generate fallback PDF using basic text formatting"""
-        logger.info("Generating fallback PDF report")
-        
-        # Create a simple text-based PDF content
-        content = f"""
-SECURITY ASSESSMENT REPORT
-Target: {target_ip}
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-EXECUTIVE SUMMARY
-================
-{report_data.get('executive_summary', {}).get('assessment_overview', 'Assessment completed.')}
-
-Key Findings:
-{chr(10).join(f"- {finding}" for finding in report_data.get('executive_summary', {}).get('key_findings', []))}
-
-RISK ASSESSMENT
-===============
-Overall Risk Level: {report_data.get('risk_assessment', {}).get('overall_risk_level', 'Unknown')}
-Risk Score: {report_data.get('risk_assessment', {}).get('risk_score', 0):.1f}/10
-Critical Vulnerabilities: {report_data.get('risk_assessment', {}).get('critical_vulnerabilities', 0)}
-
-RECOMMENDATIONS
-===============
-{chr(10).join(f"- {rec.get('title', 'Recommendation')}: {rec.get('description', 'No description')}" for rec in report_data.get('detailed_recommendations', []))}
-
-Generated by BreachPilot Professional Security Assessment Platform
+        summary_text += f"""
+            • <font color='red'><b>Critical:</b> {critical}</font><br/>
+            • <font color='orange'><b>High:</b> {high}</font><br/>
+            • <font color='yellow'><b>Medium:</b> {medium}</font><br/>
+            • <font color='green'><b>Low:</b> {low}</font><br/>
         """
         
-        # Try to use pandoc if available
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file.flush()
-                
-                # Convert to PDF using pandoc
-                subprocess.run([
-                    'pandoc', temp_file.name,
-                    '-o', str(output_path),
-                    '--pdf-engine=wkhtmltopdf',
-                    '--margin-top=2cm',
-                    '--margin-bottom=2cm',
-                    '--margin-left=2cm',
-                    '--margin-right=2cm'
-                ], check=True, capture_output=True)
-                
-                os.unlink(temp_file.name)
-                logger.info(f"Fallback PDF generated successfully: {output_path}")
-                
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            # Final fallback: create a simple text file with .pdf extension
-            logger.warning("Pandoc not available, creating text-based PDF")
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+        story.append(Paragraph(summary_text, self.styles['ExecutiveSummary']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Risk Summary Table
+        risk_data = [
+            ['Severity', 'Count', 'Risk Level'],
+            ['Critical', str(critical), 'Immediate Action Required'],
+            ['High', str(high), 'Urgent Remediation'],
+            ['Medium', str(medium), 'Planned Remediation'],
+            ['Low', str(low), 'Best Practice'],
+        ]
+        
+        risk_table = Table(risk_data, colWidths=[2*inch, 1*inch, 3*inch])
+        risk_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(risk_table)
+        
+        return story
     
-    def _generate_error_pdf(self, output_path: Path, target_ip: str, error_msg: str):
-        """Generate error PDF file"""
-        error_content = f"""
-SECURITY ASSESSMENT REPORT - ERROR
-Target: {target_ip}
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-PDF GENERATION FAILED
-====================
-Error: {error_msg}
-
-Please contact the system administrator or check the HTML report instead.
-
-Generated by BreachPilot Professional Security Assessment Platform
+    def _create_methodology(self) -> List:
+        """Create methodology section"""
+        story = []
+        
+        story.append(Paragraph("2. METHODOLOGY", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        methodology_text = """
+            The penetration test followed industry-standard methodologies including:
+            <br/><br/>
+            <b>2.1 Information Gathering</b><br/>
+            • Network reconnaissance<br/>
+            • Service enumeration<br/>
+            • Operating system fingerprinting<br/>
+            <br/>
+            <b>2.2 Vulnerability Analysis</b><br/>
+            • Automated vulnerability scanning<br/>
+            • Manual verification of findings<br/>
+            • CVE database correlation<br/>
+            <br/>
+            <b>2.3 Exploitation</b><br/>
+            • Proof-of-concept exploitation<br/>
+            • Privilege escalation attempts<br/>
+            • Lateral movement assessment<br/>
+            <br/>
+            <b>2.4 Post-Exploitation</b><br/>
+            • Data access verification<br/>
+            • Persistence mechanisms<br/>
+            • Impact analysis<br/>
         """
         
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(error_content)
+        story.append(Paragraph(methodology_text, self.styles['ExecutiveSummary']))
+        
+        return story
+    
+    def _create_findings(self, data: Dict[str, Any]) -> List:
+        """Create detailed findings section"""
+        story = []
+        
+        story.append(Paragraph("3. DETAILED FINDINGS", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        vulnerabilities = data.get('vulnerabilities', [])
+        
+        for i, vuln in enumerate(vulnerabilities, 1):
+            # Finding Title
+            finding_title = f"<b>Finding {i}: {vuln.get('cve_id', 'Unknown')} - {vuln.get('title', 'Vulnerability')}</b>"
+            story.append(Paragraph(finding_title, self.styles['FindingTitle']))
+            
+            # Severity Badge
+            severity = vuln.get('severity', 'UNKNOWN')
+            severity_color = {
+                'CRITICAL': 'red',
+                'HIGH': 'orange',
+                'MEDIUM': 'yellow',
+                'LOW': 'green'
+            }.get(severity, 'grey')
+            
+            severity_text = f"<font color='{severity_color}'><b>Severity: {severity}</b></font>"
+            story.append(Paragraph(severity_text, self.styles['BodyText']))
+            story.append(Spacer(1, 0.1*inch))
+            
+            # Finding Details
+            finding_data = [
+                ['Description:', vuln.get('description', 'No description available')],
+                ['CVSS Score:', f"{vuln.get('cvss_score', 'N/A')}"],
+                ['Affected System:', vuln.get('affected_system', data.get('target', 'N/A'))],
+                ['Status:', vuln.get('status', 'Verified')],
+            ]
+            
+            finding_table = Table(finding_data, colWidths=[1.5*inch, 4.5*inch])
+            finding_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            
+            story.append(finding_table)
+            story.append(Spacer(1, 0.2*inch))
+            
+            # Impact
+            impact_text = f"<b>Impact:</b> {vuln.get('impact', 'Potential compromise of system security')}"
+            story.append(Paragraph(impact_text, self.styles['BodyText']))
+            story.append(Spacer(1, 0.1*inch))
+            
+            # Evidence
+            if vuln.get('evidence'):
+                evidence_text = f"<b>Evidence:</b><br/>{vuln.get('evidence')}"
+                story.append(Paragraph(evidence_text, self.styles['BodyText']))
+            
+            story.append(Spacer(1, 0.3*inch))
+        
+        return story
+    
+    def _create_recommendations(self, data: Dict[str, Any]) -> List:
+        """Create recommendations section"""
+        story = []
+        
+        story.append(Paragraph("4. RECOMMENDATIONS", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        recommendations_text = """
+            Based on the findings, we recommend the following remediation actions:
+            <br/><br/>
+            <b>Immediate Actions (Critical/High):</b><br/>
+            1. Apply all available security patches immediately<br/>
+            2. Disable vulnerable services where possible<br/>
+            3. Implement network segmentation<br/>
+            4. Review and update access controls<br/>
+            <br/>
+            <b>Short-term Actions (30 days):</b><br/>
+            1. Conduct security awareness training<br/>
+            2. Implement monitoring and alerting<br/>
+            3. Review and update security policies<br/>
+            4. Schedule regular vulnerability assessments<br/>
+            <br/>
+            <b>Long-term Actions (90 days):</b><br/>
+            1. Implement defense-in-depth strategy<br/>
+            2. Establish incident response procedures<br/>
+            3. Conduct regular penetration tests<br/>
+            4. Maintain security patch management program<br/>
+        """
+        
+        story.append(Paragraph(recommendations_text, self.styles['ExecutiveSummary']))
+        
+        return story
+    
+    def _create_technical_details(self, data: Dict[str, Any]) -> List:
+        """Create technical details section"""
+        story = []
+        
+        story.append(Paragraph("5. TECHNICAL DETAILS", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Scan Information
+        scan_info = f"""
+            <b>Target Information:</b><br/>
+            • Target: {data.get('target', 'N/A')}<br/>
+            • Scan Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>
+            • Scanner: BreachPilot v2.0<br/>
+            • Scan Duration: {data.get('scan_duration', 'N/A')}<br/>
+            <br/>
+            <b>Tools Used:</b><br/>
+            • Nmap - Network scanning<br/>
+            • Metasploit - Exploitation framework<br/>
+            • Custom CVE exploits<br/>
+            • BreachPilot AI Analysis<br/>
+        """
+        
+        story.append(Paragraph(scan_info, self.styles['BodyText']))
+        
+        return story
+    
+    def _create_appendix(self, data: Dict[str, Any]) -> List:
+        """Create appendix section"""
+        story = []
+        
+        story.append(Paragraph("6. APPENDIX", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        appendix_text = """
+            <b>A. References</b><br/>
+            • OWASP Testing Guide<br/>
+            • PTES - Penetration Testing Execution Standard<br/>
+            • NIST SP 800-115<br/>
+            • CVE Database (cve.mitre.org)<br/>
+            <br/>
+            <b>B. Glossary</b><br/>
+            • <b>CVE:</b> Common Vulnerabilities and Exposures<br/>
+            • <b>CVSS:</b> Common Vulnerability Scoring System<br/>
+            • <b>PoC:</b> Proof of Concept<br/>
+            • <b>RCE:</b> Remote Code Execution<br/>
+            <br/>
+            <b>C. Contact Information</b><br/>
+            For questions regarding this report, please contact:<br/>
+            Email: security@breachpilot.com<br/>
+            Report ID: {data.get('report_id', 'N/A')}<br/>
+        """
+        
+        story.append(Paragraph(appendix_text, self.styles['BodyText']))
+        
+        return story
+    
+    def _add_page_number(self, canvas, doc):
+        """Add page numbers to each page"""
+        page_num = canvas.getPageNumber()
+        text = f"Page {page_num}"
+        canvas.saveState()
+        canvas.setFont('Helvetica', 9)
+        canvas.drawRightString(200*cm, 0.75*cm, text)
+        canvas.drawString(1*cm, 0.75*cm, "BreachPilot Report")
+        canvas.restoreState()
+
+
+def generate_pentest_report(scan_data: Dict[str, Any], output_dir: str) -> str:
+    """Generate a professional penetration testing PDF report"""
+    if not REPORTLAB_AVAILABLE:
+        raise ImportError("reportlab is required. Install with: pip install reportlab")
+    
+    # Generate unique filename
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    target = scan_data.get('target', 'unknown').replace('.', '_')
+    filename = f"pentest_report_{target}_{timestamp}.pdf"
+    output_path = os.path.join(output_dir, filename)
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Generate report
+    generator = ProfessionalPDFGenerator()
+    generator.generate_report(scan_data, output_path)
+    
+    return output_path

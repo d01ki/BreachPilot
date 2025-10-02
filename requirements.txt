@@ -1,55 +1,42 @@
-# BreachPilot Professional Security Assessment Framework
-# Core Dependencies
+# Core dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
 
-# Web Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+# HTTP and API
+httpx>=0.25.0
+requests>=2.31.0
 
-# Data Models and Validation
-pydantic==2.5.0
+# Security and Exploitation
+impacket>=0.11.0
+pycryptodome>=3.19.0
 
-# CrewAI and AI Integration
-crewai==0.41.1
-langchain-openai==0.0.2
-langchain==0.0.352
-openai==1.3.7
-
-# HTTP Requests and API Clients
-requests==2.31.0
-httpx==0.25.2
-
-# Network Security Tools
-python-nmap==0.7.1
-
-# Cryptography and Security
-cryptography==41.0.8
-impacket==0.11.0
-
-# Data Processing and Analysis
-pandas==2.1.3
-numpy==1.25.2
-
-# Web Scraping and Parsing
-beautifulsoup4==4.12.2
-lxml==4.9.3
+# AI and Agents
+crewai>=0.1.0
+langchain>=0.1.0
+openai>=1.0.0
 
 # Report Generation
-jinja2==3.1.2
-markdown==3.5.1
-weasyprint==60.2
+reportlab>=4.0.7
+Pillow>=10.1.0
 
-# PDF Generation (Alternative)
-reportlab==4.0.7
+# Database and Storage
+sqlalchemy>=2.0.0
+alembic>=1.12.0
 
-# Word Document Generation
-python-docx==1.1.0
+# Utilities
+python-dotenv>=1.0.0
+pyaml>=6.0.1
+click>=8.1.7
+colorama>=0.4.6
 
-# Enhanced Report Generation
-pandoc==2.3
+# Testing
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
 
-# Logging and Configuration
-python-dotenv==1.0.0
-
-# Development and Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
+# Development
+black>=23.11.0
+flake8>=6.1.0
+mypy>=1.7.0
